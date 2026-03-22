@@ -186,13 +186,13 @@ struct KeyCell: View {
         }
         .frame(width: width, height: height)
         .background(
-            RoundedRectangle(cornerRadius: 0)
+            RoundedRectangle(cornerRadius: 6)
                 .fill(key.isActive
                     ? (key.color ?? .white).opacity(0.12)
                     : Color(hex: "#313244").opacity(0.4))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 0)
+            RoundedRectangle(cornerRadius: 6)
                 .stroke(key.isActive
                     ? (key.color ?? .white).opacity(0.2)
                     : Color(hex: "#cdd6f4").opacity(0.04), lineWidth: 1)
