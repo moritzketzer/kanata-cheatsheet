@@ -78,6 +78,10 @@ final class KanataTCPClient {
     }
 
     private func connect() {
+        // Cancel any lingering connection to prevent duplicate event delivery
+        connection?.cancel()
+        connection = nil
+
         let nwHost = NWEndpoint.Host(host)
         let nwPort = NWEndpoint.Port(rawValue: port)!
         let conn = NWConnection(host: nwHost, port: nwPort, using: .tcp)
@@ -108,7 +112,7 @@ final class KanataTCPClient {
 
     private func receive(on conn: NWConnection) {
         conn.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
+            guard let self, self.connection === conn else { return }
             if let data, let str = String(data: data, encoding: .utf8) {
                 self.buffer += str
                 while let newlineIndex = self.buffer.firstIndex(of: "\n") {
