@@ -96,10 +96,20 @@ struct KeyboardView: View {
     let groups: [(String, Color)]
     let config: Config.Display
 
-    static let keySize: CGFloat = 56
+    let keySize: CGFloat
     static let keySpacing: CGFloat = 4
 
     init(layerName: String, layer: Config.Layer, display: Config.Display) {
+        // Derive key size from width_percent and screen width.
+        // The widest row (bottom/space row) has ~12.5 key-units total.
+        // Solve: totalRowWidth + padding = screenWidth * percent/100
+        let screenWidth = NSScreen.main?.frame.width ?? 1440
+        let targetWidth = screenWidth * CGFloat(display.width_percent) / 100.0
+        let maxRowUnits: CGFloat = KeyboardLayout.rows.map { row in
+            row.map { $0.width }.reduce(0, +)
+        }.max() ?? 14.0
+        let padding: CGFloat = 64 + CGFloat(maxRowUnits - 1) * KeyboardView.keySpacing
+        self.keySize = (targetWidth - padding) / maxRowUnits
         self.layerLabel = layer.label
         self.resolvedKeys = KeyResolver.resolve(layout: KeyboardLayout.rows, layer: layer)
         self.keyWidths = KeyboardLayout.rows.map { row in
@@ -125,7 +135,7 @@ struct KeyboardView: View {
                         ForEach(0..<resolvedKeys[rowIndex].count, id: \.self) { colIndex in
                             let key = resolvedKeys[rowIndex][colIndex]
                             let width = keyWidths[rowIndex][colIndex]
-                            KeyCell(key: key, width: width * KeyboardView.keySize)
+                            KeyCell(key: key, width: width * keySize, height: keySize)
                         }
                     }
                 }
@@ -157,21 +167,24 @@ struct KeyboardView: View {
 struct KeyCell: View {
     let key: ResolvedKey
     let width: CGFloat
+    let height: CGFloat
 
     var body: some View {
+        let labelSize = height * (key.isActive ? 0.27 : 0.23)
+        let descSize = height * 0.18
         VStack(spacing: 1) {
             Text(key.label)
-                .font(.system(size: key.isActive ? 15 : 13, weight: key.isActive ? .bold : .regular, design: .monospaced))
+                .font(.system(size: labelSize, weight: key.isActive ? .bold : .regular, design: .monospaced))
                 .foregroundColor(key.isActive ? (key.color ?? .white) : Color(hex: "#45475a"))
             if let desc = key.description {
                 Text(desc)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: descSize, design: .monospaced))
                     .foregroundColor(Color(hex: "#bac2de"))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
         }
-        .frame(width: width, height: KeyboardView.keySize)
+        .frame(width: width, height: height)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(key.isActive

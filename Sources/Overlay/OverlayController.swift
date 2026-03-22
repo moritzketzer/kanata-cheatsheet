@@ -90,7 +90,8 @@ final class OverlayController {
 
         let view = KeyboardView(layerName: layerName, layer: layerConfig, display: config.display)
         let hostView = NSHostingView(rootView: view)
-        hostView.frame = NSRect(x: 0, y: 0, width: screenFrame.width * 0.8, height: screenFrame.height * 0.6)
+        let pct = CGFloat(config.display.width_percent) / 100.0
+        hostView.frame = NSRect(x: 0, y: 0, width: screenFrame.width * pct, height: screenFrame.height * 0.8)
         let fittingSize = hostView.fittingSize
 
         let panelRect = NSRect(
