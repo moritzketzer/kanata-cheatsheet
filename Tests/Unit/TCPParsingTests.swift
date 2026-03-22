@@ -17,9 +17,23 @@ struct TCPParsingTests {
         #expect(event == .layerChange("yabai"))
     }
 
-    @Test("ignores non-LayerChange events")
+    @Test("parses MessagePush string format")
+    func messagePushString() throws {
+        let json = #"{"MessagePush":{"message":"cheatsheet-toggle"}}"#
+        let event = try KanataEvent.parse(from: json)
+        #expect(event == .messagePush("cheatsheet-toggle"))
+    }
+
+    @Test("parses MessagePush array format")
+    func messagePushArray() throws {
+        let json = #"{"MessagePush":{"message":["cheatsheet-show"]}}"#
+        let event = try KanataEvent.parse(from: json)
+        #expect(event == .messagePush("cheatsheet-show"))
+    }
+
+    @Test("ignores unknown events")
     func otherEvents() throws {
-        let json = #"{"MessagePush":{"message":"jump Safari"}}"#
+        let json = #"{"ConfigFileReload":{}}"#
         let event = try KanataEvent.parse(from: json)
         #expect(event == .other)
     }

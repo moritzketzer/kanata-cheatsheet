@@ -13,24 +13,70 @@ enum OverlayAction: Equatable {
 final class OverlayLogic {
     private let config: Config
     private(set) var pendingLayer: String?
+    private(set) var currentLayer: String?
+    private(set) var isVisible = false
 
     init(config: Config) {
         self.config = config
     }
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
-        if config.layers[layer] != nil {
+        currentLayer = layer
+        if let layerConfig = config.layers[layer] {
+            if layerConfig.trigger == "manual" {
+                // Manual layers never auto-show; hide if currently visible
+                pendingLayer = nil
+                if isVisible {
+                    isVisible = false
+                    return .hide
+                }
+                return .none
+            }
             pendingLayer = layer
             return .startDelay(layer)
         } else {
             pendingLayer = nil
+            if isVisible {
+                isVisible = false
+                return .hide
+            }
             return .hide
         }
     }
 
     func delayExpired(for layer: String) -> OverlayAction {
         guard pendingLayer == layer else { return .none }
+        isVisible = true
         return .show(layer)
+    }
+
+    func handleMessage(_ message: String) -> OverlayAction {
+        switch message {
+        case "cheatsheet-show":
+            guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
+            pendingLayer = nil
+            isVisible = true
+            return .show(layer)
+        case "cheatsheet-hide":
+            pendingLayer = nil
+            if isVisible {
+                isVisible = false
+                return .hide
+            }
+            return .none
+        case "cheatsheet-toggle":
+            if isVisible {
+                isVisible = false
+                pendingLayer = nil
+                return .hide
+            }
+            guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
+            pendingLayer = nil
+            isVisible = true
+            return .show(layer)
+        default:
+            return .none
+        }
     }
 }
 
@@ -54,29 +100,36 @@ final class OverlayController {
         delayTimer = nil
 
         let action = logic.handleLayerChange(layer)
+        executeAction(action)
+    }
+
+    func handleMessage(_ message: String) {
+        delayTimer?.invalidate()
+        delayTimer = nil
+
+        let action = logic.handleMessage(message)
+        executeAction(action)
+    }
+
+    private func executeAction(_ action: OverlayAction) {
         switch action {
         case .startDelay(let layerName):
             let delay = Double(config.display.delay_ms) / 1000.0
             delayTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
                 self?.onDelayExpired(for: layerName)
             }
+        case .show(let layerName):
+            showOverlay(for: layerName)
         case .hide:
             hideOverlay()
-        case .show, .none:
+        case .none:
             break
         }
     }
 
     private func onDelayExpired(for layer: String) {
         let action = logic.delayExpired(for: layer)
-        switch action {
-        case .show(let layerName):
-            showOverlay(for: layerName)
-        case .hide:
-            hideOverlay()
-        case .startDelay, .none:
-            break
-        }
+        executeAction(action)
     }
 
     private func showOverlay(for layerName: String) {

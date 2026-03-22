@@ -5,6 +5,7 @@ import Network
 
 enum KanataEvent: Equatable {
     case layerChange(String)
+    case messagePush(String)
     case other
 
     static func parse(from string: String) throws -> KanataEvent {
@@ -17,6 +18,14 @@ enum KanataEvent: Equatable {
         if let lc = obj["LayerChange"] as? [String: Any],
            let name = lc["new"] as? String {
             return .layerChange(name)
+        }
+        // push-msg sends message as string or single-element array
+        if let push = obj["MessagePush"] as? [String: Any] {
+            if let str = push["message"] as? String {
+                return .messagePush(str)
+            } else if let arr = push["message"] as? [String], let first = arr.first {
+                return .messagePush(first)
+            }
         }
         return .other
     }

@@ -64,4 +64,85 @@ struct OverlayControllerTests {
         let action = logic.delayExpired(for: "nav")
         #expect(action == .none)
     }
+
+    // MARK: - Manual trigger mode
+
+    @Test("manual layer does not auto-show on delay")
+    func manualLayerSkipsDelay() {
+        let config = Config(
+            layers: ["nav": Config.Layer(label: "NAV", trigger: "manual", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        let action = logic.handleLayerChange("nav")
+        #expect(action == .none)
+    }
+
+    @Test("toggle shows overlay for current layer")
+    func toggleShows() {
+        let config = Config(
+            layers: ["nav": Config.Layer(label: "NAV", trigger: "manual", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("nav")
+        let action = logic.handleMessage("cheatsheet-toggle")
+        #expect(action == .show("nav"))
+    }
+
+    @Test("toggle hides when already visible")
+    func toggleHides() {
+        let config = Config(
+            layers: ["nav": Config.Layer(label: "NAV", trigger: "manual", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("nav")
+        _ = logic.handleMessage("cheatsheet-show")
+        let action = logic.handleMessage("cheatsheet-toggle")
+        #expect(action == .hide)
+    }
+
+    @Test("show message works for current layer")
+    func showMessage() {
+        let config = Config(
+            layers: ["nav": Config.Layer(label: "NAV", trigger: "manual", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("nav")
+        let action = logic.handleMessage("cheatsheet-show")
+        #expect(action == .show("nav"))
+    }
+
+    @Test("hide message hides visible overlay")
+    func hideMessage() {
+        let config = Config(
+            layers: ["nav": Config.Layer(label: "NAV", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("nav")
+        _ = logic.delayExpired(for: "nav")
+        let action = logic.handleMessage("cheatsheet-hide")
+        #expect(action == .hide)
+    }
+
+    @Test("unknown message does nothing")
+    func unknownMessage() {
+        let config = Config(
+            layers: ["nav": Config.Layer(label: "NAV", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("nav")
+        let action = logic.handleMessage("something-else")
+        #expect(action == .none)
+    }
+
+    @Test("layer change hides manual layer overlay")
+    func layerChangeHidesManualOverlay() {
+        let config = Config(
+            layers: ["nav": Config.Layer(label: "NAV", trigger: "manual", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("nav")
+        _ = logic.handleMessage("cheatsheet-show")
+        let action = logic.handleLayerChange("mine")
+        #expect(action == .hide)
+    }
 }

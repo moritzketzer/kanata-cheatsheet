@@ -45,7 +45,14 @@ struct Config: Codable {
 
     struct Layer: Codable {
         var label: String
+        var trigger: String  // "delay" (auto-show after delay) or "manual" (push-msg only)
         var groups: [String: Group]
+
+        init(label: String, trigger: String = "delay", groups: [String: Group] = [:]) {
+            self.label = label
+            self.trigger = trigger
+            self.groups = groups
+        }
     }
 
     struct Group: Codable {
@@ -88,6 +95,15 @@ extension Config.Connection {
         self.host = try container.decodeIfPresent(String.self, forKey: .host) ?? "localhost"
         self.port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 7070
         self.reconnect_interval_ms = try container.decodeIfPresent(Int.self, forKey: .reconnect_interval_ms) ?? 3000
+    }
+}
+
+extension Config.Layer {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.label = try container.decode(String.self, forKey: .label)
+        self.trigger = try container.decodeIfPresent(String.self, forKey: .trigger) ?? "delay"
+        self.groups = try container.decodeIfPresent([String: Config.Group].self, forKey: .groups) ?? [:]
     }
 }
 

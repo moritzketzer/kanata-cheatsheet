@@ -43,6 +43,9 @@ extension AppDelegate: KanataTCPClientDelegate {
         case .layerChange(let layer):
             Log.debug("Layer changed to: \(layer)")
             overlayController?.handleLayerChange(layer)
+        case .messagePush(let message):
+            Log.debug("Message received: \(message)")
+            overlayController?.handleMessage(message)
         case .other:
             break
         }
