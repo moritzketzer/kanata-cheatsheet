@@ -145,4 +145,53 @@ struct OverlayControllerTests {
         let action = logic.handleLayerChange("mine")
         #expect(action == .hide)
     }
+
+    // MARK: - Parameterized show + same-layer LayerChange
+
+    @Test("parameterized show uses target layer regardless of currentLayer")
+    func parameterizedShow() {
+        let config = Config(
+            layers: [
+                "apps": Config.Layer(label: "APPS", groups: [:]),
+                "finder": Config.Layer(label: "FINDER", trigger: "manual", groups: [:])
+            ]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("apps")
+        let action = logic.handleMessage("cheatsheet-show:finder")
+        #expect(action == .show("finder"))
+    }
+
+    @Test("parameterized show ignored if layer not in config")
+    func parameterizedShowUnknownLayer() {
+        let config = Config(layers: ["nav": Config.Layer(label: "NAV", trigger: "manual", groups: [:])])
+        let logic = OverlayLogic(config: config)
+        let action = logic.handleMessage("cheatsheet-show:nonexistent")
+        #expect(action == .none)
+    }
+
+    @Test("LayerChange to currently visible manual layer does not hide")
+    func sameLayerLayerChangeDoesNotHide() {
+        let config = Config(
+            layers: ["finder": Config.Layer(label: "FINDER", trigger: "manual", groups: [:])]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleMessage("cheatsheet-show:finder")
+        let action = logic.handleLayerChange("finder")
+        #expect(action == .none)
+    }
+
+    @Test("LayerChange to different manual layer hides")
+    func differentManualLayerLayerChangeHides() {
+        let config = Config(
+            layers: [
+                "apps": Config.Layer(label: "APPS", trigger: "manual", groups: [:]),
+                "finder": Config.Layer(label: "FINDER", trigger: "manual", groups: [:])
+            ]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleMessage("cheatsheet-show:finder")
+        let action = logic.handleLayerChange("apps")
+        #expect(action == .hide)
+    }
 }

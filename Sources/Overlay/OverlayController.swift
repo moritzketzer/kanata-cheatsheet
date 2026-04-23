@@ -14,6 +14,7 @@ final class OverlayLogic {
     private let config: Config
     private(set) var pendingLayer: String?
     private(set) var currentLayer: String?
+    private(set) var visibleLayer: String?
     private(set) var isVisible = false
 
     init(config: Config) {
@@ -24,10 +25,13 @@ final class OverlayLogic {
         currentLayer = layer
         if let layerConfig = config.layers[layer] {
             if layerConfig.trigger == "manual" {
-                // Manual layers never auto-show; hide if currently visible
                 pendingLayer = nil
-                if isVisible {
+                // Hide only if we're currently showing a *different* layer.
+                // A LayerChange to the same layer we're showing is the kanata
+                // multi (push-msg + layer-switch) landing — keep it visible.
+                if isVisible && visibleLayer != layer {
                     isVisible = false
+                    visibleLayer = nil
                     return .hide
                 }
                 return .none
@@ -38,6 +42,7 @@ final class OverlayLogic {
             pendingLayer = nil
             if isVisible {
                 isVisible = false
+                visibleLayer = nil
                 return .hide
             }
             return .hide
@@ -47,32 +52,45 @@ final class OverlayLogic {
     func delayExpired(for layer: String) -> OverlayAction {
         guard pendingLayer == layer else { return .none }
         isVisible = true
+        visibleLayer = layer
         return .show(layer)
     }
 
     func handleMessage(_ message: String) -> OverlayAction {
+        if message.hasPrefix("cheatsheet-show:") {
+            let layer = String(message.dropFirst("cheatsheet-show:".count))
+            guard config.layers[layer] != nil else { return .none }
+            pendingLayer = nil
+            isVisible = true
+            visibleLayer = layer
+            return .show(layer)
+        }
         switch message {
         case "cheatsheet-show":
             guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
             pendingLayer = nil
             isVisible = true
+            visibleLayer = layer
             return .show(layer)
         case "cheatsheet-hide":
             pendingLayer = nil
             if isVisible {
                 isVisible = false
+                visibleLayer = nil
                 return .hide
             }
             return .none
         case "cheatsheet-toggle":
             if isVisible {
                 isVisible = false
+                visibleLayer = nil
                 pendingLayer = nil
                 return .hide
             }
             guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
             pendingLayer = nil
             isVisible = true
+            visibleLayer = layer
             return .show(layer)
         default:
             return .none
