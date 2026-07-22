@@ -5,6 +5,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tcpClient: KanataTCPClient?
     private var overlayController: OverlayController?
+    private var browserController: RegistryBrowserController?
     private var config: Config?
     private var registryResult: Result<KeybindingRegistry, Error>?
 
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.error("Failed to load keybinding registry: \(error)")
         }
         overlayController = OverlayController(config: config, registryResult: loadedRegistry)
+        browserController = RegistryBrowserController(registryResult: loadedRegistry)
 
         let client = KanataTCPClient(
             host: config.connection.host,
@@ -53,7 +55,12 @@ extension AppDelegate: KanataTCPClientDelegate {
             overlayController?.handleLayerChange(layer)
         case .messagePush(let message):
             Log.debug("Message received: \(message)")
-            overlayController?.handleMessage(message)
+            switch AppMessageRouter.route(message) {
+            case .openRegistry:
+                browserController?.open()
+            case .overlay(let message):
+                overlayController?.handleMessage(message)
+            }
         case .other:
             break
         }
