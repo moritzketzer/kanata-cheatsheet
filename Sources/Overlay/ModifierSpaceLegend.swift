@@ -6,6 +6,7 @@ struct ModifierSpaceLegend: View {
     let slots: [ModifierSpaceSlot]
     let registry: KeybindingRegistry
     let showFree: Bool
+    let availableWidth: CGFloat
 
     private var visibleSlots: [ModifierSpaceSlot] {
         showFree ? slots : slots.filter { !$0.isFree }
@@ -38,6 +39,7 @@ struct ModifierSpaceLegend: View {
                     )
                 }
             }
+            .frame(width: availableWidth)
         }
         .padding(.top, 2)
     }

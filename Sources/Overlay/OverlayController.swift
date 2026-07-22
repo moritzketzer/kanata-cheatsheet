@@ -223,9 +223,31 @@ final class OverlayController {
         guard
             let currentLayer,
             let layerConfig = config.layers[currentLayer],
-            let hostView
+            let hostView,
+            let panel
         else { return }
         hostView.rootView = makeKeyboardView(layerName: currentLayer, layer: layerConfig)
+
+        let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let screenFrame = screen.frame
+        let pct = CGFloat(config.display.width_percent) / 100.0
+        hostView.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: screenFrame.width * pct,
+            height: screenFrame.height * 0.8
+        )
+        hostView.layoutSubtreeIfNeeded()
+        let fittingSize = hostView.fittingSize
+        panel.setFrame(
+            NSRect(
+                x: screenFrame.midX - fittingSize.width / 2,
+                y: screenFrame.midY - fittingSize.height / 2,
+                width: fittingSize.width,
+                height: fittingSize.height
+            ),
+            display: true
+        )
     }
 
     private func hideOverlay() {

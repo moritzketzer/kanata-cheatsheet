@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import AppKit
 
 @Suite("OverlayController Logic")
 struct OverlayControllerTests {
@@ -233,5 +234,83 @@ struct OverlayControllerTests {
         _ = logic.delayExpired(for: "nav")
         #expect(logic.handleMessage("cheatsheet-space-toggle-free") == .none)
         #expect(!logic.showFreeModifierSpace)
+    }
+
+    @Test("showing free modifier-space slots resizes the overlay")
+    @MainActor
+    func showingFreeSlotsResizesOverlay() throws {
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let config = Config(
+            display: display,
+            layers: ["apps": Config.Layer(label: "APPS", groups: [:])]
+        )
+        let registry = modifierSpaceRegistry(occupiedCount: 6)
+        let controller = OverlayController(config: config, registryResult: .success(registry))
+
+        controller.handleMessage("cheatsheet-show:apps")
+        let panel = try #require(NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
+        let occupiedHeight = panel.frame.height
+
+        controller.handleMessage("cheatsheet-space-toggle-free")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        let expandedHeight = try #require(panel.contentView).fittingSize.height
+        #expect(expandedHeight > occupiedHeight)
+        #expect(panel.frame.height >= expandedHeight)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    private func modifierSpaceRegistry(occupiedCount: Int) -> KeybindingRegistry {
+        let binding = RegistryBinding(
+            id: "test.action",
+            provider: "test",
+            ownership: "observed",
+            gesture: RegistryGesture(
+                type: "chord",
+                key: "Space",
+                modifiers: ["command"],
+                display: "Command Space",
+                prefixKey: nil
+            ),
+            context: RegistryContext(
+                stage: "system",
+                application: nil,
+                mode: nil,
+                layer: nil,
+                device: nil
+            ),
+            action: RegistryAction(id: "test.action", label: "Test action", detail: nil),
+            source: RegistrySource(path: "test", target: nil, line: nil),
+            tags: [],
+            diagnosticIds: []
+        )
+        let slots = (0..<15).map { index in
+            ModifierSpaceSlot(
+                modifiers: ["modifier-\(index)"],
+                display: "M\(index) Space",
+                state: index < occupiedCount ? "occupied" : "free",
+                bindingIds: index < occupiedCount ? [binding.id] : []
+            )
+        }
+        return KeybindingRegistry(
+            schemaVersion: 1,
+            providers: [],
+            bindings: [binding],
+            diagnostics: [],
+            views: RegistryViews(
+                modifierSpace: ModifierSpaceView(
+                    id: "modifier-space",
+                    label: "Modifier + Space",
+                    slots: slots
+                ),
+                allBindings: AllBindingsView(id: "all-bindings", label: "All Bindings", bindingIds: [])
+            )
+        )
     }
 }

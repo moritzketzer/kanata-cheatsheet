@@ -100,6 +100,7 @@ struct KeyboardView: View {
     let showFreeModifierSpace: Bool
 
     let keySize: CGFloat
+    let contentWidth: CGFloat
     static let keySpacing: CGFloat = 4
 
     init(
@@ -119,6 +120,7 @@ struct KeyboardView: View {
         }.max() ?? 14.0
         let padding: CGFloat = 64 + CGFloat(maxRowUnits - 1) * KeyboardView.keySpacing
         self.keySize = (targetWidth - padding) / maxRowUnits
+        self.contentWidth = targetWidth - 64
         self.layerName = layerName
         self.layerLabel = layer.label
         self.resolvedKeys = KeyResolver.resolve(layout: KeyboardLayout.rows, layer: layer)
@@ -173,7 +175,8 @@ struct KeyboardView: View {
                 ModifierSpaceLegend(
                     slots: registry.views.modifierSpace.slots,
                     registry: registry,
-                    showFree: showFreeModifierSpace
+                    showFree: showFreeModifierSpace,
+                    availableWidth: contentWidth
                 )
             }
         }
