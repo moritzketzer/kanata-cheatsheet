@@ -7,6 +7,7 @@ enum OverlayAction: Equatable {
     case startDelay(String)
     case show(String)
     case hide
+    case refresh
     case none
 }
 
@@ -16,6 +17,7 @@ final class OverlayLogic {
     private(set) var currentLayer: String?
     private(set) var visibleLayer: String?
     private(set) var isVisible = false
+    private(set) var showFreeModifierSpace = false
 
     init(config: Config) {
         self.config = config
@@ -23,6 +25,9 @@ final class OverlayLogic {
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
         currentLayer = layer
+        if layer != "apps" {
+            showFreeModifierSpace = false
+        }
         if let layerConfig = config.layers[layer] {
             if layerConfig.trigger == "manual" {
                 pendingLayer = nil
@@ -32,6 +37,7 @@ final class OverlayLogic {
                 if isVisible && visibleLayer != layer {
                     isVisible = false
                     visibleLayer = nil
+                    showFreeModifierSpace = false
                     return .hide
                 }
                 return .none
@@ -43,6 +49,7 @@ final class OverlayLogic {
             if isVisible {
                 isVisible = false
                 visibleLayer = nil
+                showFreeModifierSpace = false
                 return .hide
             }
             return .hide
@@ -60,12 +67,19 @@ final class OverlayLogic {
         if message.hasPrefix("cheatsheet-show:") {
             let layer = String(message.dropFirst("cheatsheet-show:".count))
             guard config.layers[layer] != nil else { return .none }
+            if layer != "apps" {
+                showFreeModifierSpace = false
+            }
             pendingLayer = nil
             isVisible = true
             visibleLayer = layer
             return .show(layer)
         }
         switch message {
+        case "cheatsheet-space-toggle-free":
+            guard isVisible, visibleLayer == "apps" else { return .none }
+            showFreeModifierSpace.toggle()
+            return .refresh
         case "cheatsheet-show":
             guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
             pendingLayer = nil
@@ -74,6 +88,7 @@ final class OverlayLogic {
             return .show(layer)
         case "cheatsheet-hide":
             pendingLayer = nil
+            showFreeModifierSpace = false
             if isVisible {
                 isVisible = false
                 visibleLayer = nil
@@ -85,6 +100,7 @@ final class OverlayLogic {
                 isVisible = false
                 visibleLayer = nil
                 pendingLayer = nil
+                showFreeModifierSpace = false
                 return .hide
             }
             guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
@@ -103,13 +119,16 @@ final class OverlayLogic {
 @available(macOS 14, *)
 final class OverlayController {
     private let config: Config
+    private let registry: KeybindingRegistry?
     private let logic: OverlayLogic
     private var panel: OverlayPanel?
+    private var hostView: NSHostingView<KeyboardView>?
     private var delayTimer: Timer?
     private var currentLayer: String?
 
-    init(config: Config) {
+    init(config: Config, registryResult: Result<KeybindingRegistry, Error>) {
         self.config = config
+        self.registry = try? registryResult.get()
         self.logic = OverlayLogic(config: config)
     }
 
@@ -140,6 +159,8 @@ final class OverlayController {
             showOverlay(for: layerName)
         case .hide:
             hideOverlay()
+        case .refresh:
+            refreshOverlay()
         case .none:
             break
         }
@@ -159,7 +180,7 @@ final class OverlayController {
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let screenFrame = screen.frame
 
-        let view = KeyboardView(layerName: layerName, layer: layerConfig, display: config.display)
+        let view = makeKeyboardView(layerName: layerName, layer: layerConfig)
         let hostView = NSHostingView(rootView: view)
         let pct = CGFloat(config.display.width_percent) / 100.0
         hostView.frame = NSRect(x: 0, y: 0, width: screenFrame.width * pct, height: screenFrame.height * 0.8)
@@ -184,7 +205,27 @@ final class OverlayController {
         }
 
         self.panel = panel
+        self.hostView = hostView
         Log.info("Showing overlay for layer: \(layerName)")
+    }
+
+    private func makeKeyboardView(layerName: String, layer: Config.Layer) -> KeyboardView {
+        KeyboardView(
+            layerName: layerName,
+            layer: layer,
+            display: config.display,
+            registry: registry,
+            showFreeModifierSpace: logic.showFreeModifierSpace
+        )
+    }
+
+    private func refreshOverlay() {
+        guard
+            let currentLayer,
+            let layerConfig = config.layers[currentLayer],
+            let hostView
+        else { return }
+        hostView.rootView = makeKeyboardView(layerName: currentLayer, layer: layerConfig)
     }
 
     private func hideOverlay() {
@@ -199,6 +240,7 @@ final class OverlayController {
         })
 
         self.panel = nil
+        self.hostView = nil
         Log.debug("Hiding overlay")
     }
 }

@@ -90,16 +90,25 @@ enum KeyResolver {
 
 @available(macOS 14, *)
 struct KeyboardView: View {
+    let layerName: String
     let layerLabel: String
     let resolvedKeys: [[ResolvedKey]]
     let keyWidths: [[CGFloat]]
     let groups: [(String, Color)]
     let config: Config.Display
+    let registry: KeybindingRegistry?
+    let showFreeModifierSpace: Bool
 
     let keySize: CGFloat
     static let keySpacing: CGFloat = 4
 
-    init(layerName: String, layer: Config.Layer, display: Config.Display) {
+    init(
+        layerName: String,
+        layer: Config.Layer,
+        display: Config.Display,
+        registry: KeybindingRegistry? = nil,
+        showFreeModifierSpace: Bool = false
+    ) {
         // Derive key size from width_percent and screen width.
         // The widest row (bottom/space row) has ~12.5 key-units total.
         // Solve: totalRowWidth + padding = screenWidth * percent/100
@@ -110,6 +119,7 @@ struct KeyboardView: View {
         }.max() ?? 14.0
         let padding: CGFloat = 64 + CGFloat(maxRowUnits - 1) * KeyboardView.keySpacing
         self.keySize = (targetWidth - padding) / maxRowUnits
+        self.layerName = layerName
         self.layerLabel = layer.label
         self.resolvedKeys = KeyResolver.resolve(layout: KeyboardLayout.rows, layer: layer)
         self.keyWidths = KeyboardLayout.rows.map { row in
@@ -119,6 +129,8 @@ struct KeyboardView: View {
             (name, Color(hex: group.color))
         }.sorted { $0.0 < $1.0 }
         self.config = display
+        self.registry = registry
+        self.showFreeModifierSpace = showFreeModifierSpace
     }
 
     var body: some View {
@@ -153,6 +165,16 @@ struct KeyboardView: View {
                     }
                 }
                 .padding(.top, 4)
+            }
+
+            if layerName == "apps", let registry {
+                Divider()
+                    .overlay(Color(hex: "#45475a"))
+                ModifierSpaceLegend(
+                    slots: registry.views.modifierSpace.slots,
+                    registry: registry,
+                    showFree: showFreeModifierSpace
+                )
             }
         }
         .padding(32)

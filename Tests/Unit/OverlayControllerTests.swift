@@ -3,6 +3,13 @@ import Foundation
 
 @Suite("OverlayController Logic")
 struct OverlayControllerTests {
+    private var appsConfig: Config {
+        Config(
+            display: Config.Display(delay_ms: 100),
+            layers: ["apps": Config.Layer(label: "APPS", groups: [:])]
+        )
+    }
+
     @Test("configured layer starts delay")
     func configuredLayerStartsDelay() {
         let config = Config(
@@ -193,5 +200,38 @@ struct OverlayControllerTests {
         _ = logic.handleMessage("cheatsheet-show:finder")
         let action = logic.handleLayerChange("apps")
         #expect(action == .hide)
+    }
+
+    // MARK: - Modifier-Space legend
+
+    @Test("free-slot message toggles only while apps is visible")
+    func togglesFreeSlotsForApps() {
+        let logic = OverlayLogic(config: appsConfig)
+        _ = logic.handleLayerChange("apps")
+        _ = logic.delayExpired(for: "apps")
+        #expect(logic.handleMessage("cheatsheet-space-toggle-free") == .refresh)
+        #expect(logic.showFreeModifierSpace)
+        #expect(logic.handleMessage("cheatsheet-space-toggle-free") == .refresh)
+        #expect(!logic.showFreeModifierSpace)
+    }
+
+    @Test("leaving apps resets occupied-only mode")
+    func leavingAppsResetsFreeSlots() {
+        let logic = OverlayLogic(config: appsConfig)
+        _ = logic.handleLayerChange("apps")
+        _ = logic.delayExpired(for: "apps")
+        _ = logic.handleMessage("cheatsheet-space-toggle-free")
+        _ = logic.handleLayerChange("mine")
+        #expect(!logic.showFreeModifierSpace)
+    }
+
+    @Test("free-slot message is ignored outside apps")
+    func ignoresFreeSlotsOutsideApps() {
+        let config = Config(layers: ["nav": Config.Layer(label: "NAV", groups: [:])])
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("nav")
+        _ = logic.delayExpired(for: "nav")
+        #expect(logic.handleMessage("cheatsheet-space-toggle-free") == .none)
+        #expect(!logic.showFreeModifierSpace)
     }
 }
