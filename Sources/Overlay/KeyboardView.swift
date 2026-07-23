@@ -1,34 +1,5 @@
-// Sources/Overlay/KeyboardView.swift
 import SwiftUI
 
-// MARK: - Keyboard geometry (ANSI layout)
-
-struct KeyDef {
-    let label: String
-    let width: CGFloat
-
-    init(_ label: String, _ width: CGFloat = 1.0) {
-        self.label = label
-        self.width = width
-    }
-}
-
-enum KeyboardLayout {
-    static let rows: [[KeyDef]] = [
-        [KeyDef("`"), KeyDef("1"), KeyDef("2"), KeyDef("3"), KeyDef("4"), KeyDef("5"),
-         KeyDef("6"), KeyDef("7"), KeyDef("8"), KeyDef("9"), KeyDef("0"), KeyDef("-"), KeyDef("="), KeyDef("Backspace", 1.5)],
-        [KeyDef("Tab", 1.5), KeyDef("Q"), KeyDef("W"), KeyDef("E"), KeyDef("R"), KeyDef("T"),
-         KeyDef("Y"), KeyDef("U"), KeyDef("I"), KeyDef("O"), KeyDef("P"), KeyDef("["), KeyDef("]"), KeyDef("\\")],
-        [KeyDef("Caps", 1.75), KeyDef("A"), KeyDef("S"), KeyDef("D"), KeyDef("F"), KeyDef("G"),
-         KeyDef("H"), KeyDef("J"), KeyDef("K"), KeyDef("L"), KeyDef(";"), KeyDef("'"), KeyDef("Return", 1.75)],
-        [KeyDef("Shift", 2.25), KeyDef("Z"), KeyDef("X"), KeyDef("C"), KeyDef("V"), KeyDef("B"),
-         KeyDef("N"), KeyDef("M"), KeyDef(","), KeyDef("."), KeyDef("/"), KeyDef("Shift", 2.25)],
-        [KeyDef("Ctrl", 1.25), KeyDef("Opt", 1.25), KeyDef("Cmd", 1.25), KeyDef("Space", 5.0),
-         KeyDef("Cmd", 1.25), KeyDef("Opt", 1.25), KeyDef("Fn", 1.25)],
-    ]
-}
-
-// MARK: - Color parsing
 
 extension Color {
     init(hex: String) {
@@ -36,65 +7,35 @@ extension Color {
         var int: UInt64 = 0
         Scanner(string: cleaned).scanHexInt64(&int)
 
-        let r, g, b, a: Double
+        let red: Double
+        let green: Double
+        let blue: Double
+        let alpha: Double
         switch cleaned.count {
         case 6:
-            r = Double((int >> 16) & 0xFF) / 255
-            g = Double((int >> 8) & 0xFF) / 255
-            b = Double(int & 0xFF) / 255
-            a = 1.0
+            red = Double((int >> 16) & 0xFF) / 255
+            green = Double((int >> 8) & 0xFF) / 255
+            blue = Double(int & 0xFF) / 255
+            alpha = 1
         case 8:
-            r = Double((int >> 24) & 0xFF) / 255
-            g = Double((int >> 16) & 0xFF) / 255
-            b = Double((int >> 8) & 0xFF) / 255
-            a = Double(int & 0xFF) / 255
+            red = Double((int >> 24) & 0xFF) / 255
+            green = Double((int >> 16) & 0xFF) / 255
+            blue = Double((int >> 8) & 0xFF) / 255
+            alpha = Double(int & 0xFF) / 255
         default:
-            r = 1; g = 0; b = 1; a = 1
+            red = 1
+            green = 0
+            blue = 1
+            alpha = 1
         }
-        self.init(.sRGB, red: r, green: g, blue: b, opacity: a)
+        self.init(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
     }
 }
 
-// MARK: - Resolved key data
-
-struct ResolvedKey {
-    let label: String
-    let description: String?
-    let color: Color?
-    let isActive: Bool
-}
-
-enum KeyResolver {
-    static func resolve(layout: [[KeyDef]], layer: Config.Layer) -> [[ResolvedKey]] {
-        var lookup: [String: (String, Color)] = [:]
-        for (_, group) in layer.groups {
-            let color = Color(hex: group.color)
-            for (key, desc) in group.keys {
-                lookup[key] = (desc, color)
-            }
-        }
-
-        return layout.map { row in
-            row.map { keyDef in
-                if let (desc, color) = lookup[keyDef.label] {
-                    return ResolvedKey(label: keyDef.label, description: desc, color: color, isActive: true)
-                } else {
-                    return ResolvedKey(label: keyDef.label, description: nil, color: nil, isActive: false)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - SwiftUI Views
 
 @available(macOS 14, *)
 struct KeyboardView: View {
-    let layerName: String
-    let layerLabel: String
-    let resolvedKeys: [[ResolvedKey]]
-    let keyWidths: [[CGFloat]]
-    let groups: [(String, Color)]
+    let presentation: KeyboardLayerPresentation
     let config: Config.Display
     let registry: KeybindingRegistry?
     let showFreeModifierSpace: Bool
@@ -105,62 +46,72 @@ struct KeyboardView: View {
 
     init(
         layerName: String,
-        layer: Config.Layer,
+        legacyLayer: Config.Layer?,
         display: Config.Display,
         registry: KeybindingRegistry? = nil,
         showFreeModifierSpace: Bool = false
     ) {
-        // Derive key size from width_percent and screen width.
-        // The widest row (bottom/space row) has ~12.5 key-units total.
-        // Solve: totalRowWidth + padding = screenWidth * percent/100
+        let presentation = KeyboardLayerProjector.presentation(
+            layerName: layerName,
+            legacyLayer: legacyLayer,
+            registry: registry,
+            showFree: showFreeModifierSpace
+        ) ?? KeyboardLayerPresentation(
+            name: layerName,
+            label: layerName,
+            trigger: "manual",
+            source: .legacy,
+            rows: [],
+            groups: []
+        )
         let screenWidth = NSScreen.main?.frame.width ?? 1440
-        let targetWidth = screenWidth * CGFloat(display.width_percent) / 100.0
-        let maxRowUnits: CGFloat = KeyboardLayout.rows.map { row in
-            row.map { $0.width }.reduce(0, +)
-        }.max() ?? 14.0
-        let padding: CGFloat = 64 + CGFloat(maxRowUnits - 1) * KeyboardView.keySpacing
-        self.keySize = (targetWidth - padding) / maxRowUnits
-        self.contentWidth = targetWidth - 64
-        self.layerName = layerName
-        self.layerLabel = layer.label
-        self.resolvedKeys = KeyResolver.resolve(layout: KeyboardLayout.rows, layer: layer)
-        self.keyWidths = KeyboardLayout.rows.map { row in
-            row.map { $0.width }
-        }
-        self.groups = layer.groups.map { (name, group) in
-            (name, Color(hex: group.color))
-        }.sorted { $0.0 < $1.0 }
+        let targetWidth = screenWidth * CGFloat(display.width_percent) / 100
+        let maxRowUnits = presentation.rows.map { row in
+            row.map(\.width).reduce(0, +)
+        }.max() ?? 14
+        let maxKeyCount = presentation.rows.map(\.count).max() ?? 1
+        let horizontalPadding: CGFloat = 64
+        let gaps = CGFloat(max(0, maxKeyCount - 1)) * Self.keySpacing
+
+        self.presentation = presentation
         self.config = display
         self.registry = registry
         self.showFreeModifierSpace = showFreeModifierSpace
+        self.keySize = max(28, (targetWidth - horizontalPadding - gaps) / maxRowUnits)
+        self.contentWidth = targetWidth - horizontalPadding
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(layerLabel)
+            Text(presentation.label)
                 .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundColor(Color(hex: "#cba6f7"))
                 .tracking(4)
                 .textCase(.uppercase)
 
-            VStack(spacing: KeyboardView.keySpacing) {
-                ForEach(0..<resolvedKeys.count, id: \.self) { rowIndex in
-                    HStack(spacing: KeyboardView.keySpacing) {
-                        ForEach(0..<resolvedKeys[rowIndex].count, id: \.self) { colIndex in
-                            let key = resolvedKeys[rowIndex][colIndex]
-                            let width = keyWidths[rowIndex][colIndex]
-                            KeyCell(key: key, width: width * keySize, height: keySize)
+            VStack(spacing: Self.keySpacing) {
+                ForEach(Array(presentation.rows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: Self.keySpacing) {
+                        ForEach(row) { key in
+                            KeyCell(
+                                key: key,
+                                source: presentation.source,
+                                width: CGFloat(key.width) * keySize,
+                                height: keySize
+                            )
                         }
                     }
                 }
             }
 
-            if !groups.isEmpty {
+            if !presentation.groups.isEmpty {
                 HStack(spacing: 24) {
-                    ForEach(groups, id: \.0) { name, color in
+                    ForEach(presentation.groups) { group in
                         HStack(spacing: 6) {
-                            Circle().fill(color).frame(width: 8, height: 8)
-                            Text(name)
+                            Circle()
+                                .fill(Color(hex: group.colorHex))
+                                .frame(width: 8, height: 8)
+                            Text(group.id)
                                 .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(Color(hex: "#6c7086"))
                         }
@@ -169,7 +120,7 @@ struct KeyboardView: View {
                 .padding(.top, 4)
             }
 
-            if layerName == "apps", let registry {
+            if presentation.name == "apps", let registry {
                 Divider()
                     .overlay(Color(hex: "#45475a"))
                 ModifierSpaceLegend(
@@ -185,42 +136,130 @@ struct KeyboardView: View {
             RoundedRectangle(cornerRadius: CGFloat(config.corner_radius))
                 .fill(Color(hex: config.background_color))
         )
+        .fixedSize()
     }
 }
 
+
 @available(macOS 14, *)
 struct KeyCell: View {
-    let key: ResolvedKey
+    let key: KeyboardPresentedKey
+    let source: KeyboardPresentationSource
     let width: CGFloat
     let height: CGFloat
 
+    private var isOccupied: Bool {
+        key.actionLabel != nil
+    }
+
+    private var color: Color {
+        key.colorHex.map(Color.init(hex:)) ?? Color(hex: "#cdd6f4")
+    }
+
     var body: some View {
-        let labelSize = height * (key.isActive ? 0.27 : 0.23)
-        let descSize = height * 0.18
-        VStack(spacing: 1) {
-            Text(key.label)
-                .font(.system(size: labelSize, weight: key.isActive ? .bold : .regular, design: .monospaced))
-                .foregroundColor(key.isActive ? (key.color ?? .white) : Color(hex: "#45475a"))
-            if let desc = key.description {
-                Text(desc)
-                    .font(.system(size: descSize, design: .monospaced))
-                    .foregroundColor(Color(hex: "#bac2de"))
+        ZStack(alignment: .topLeading) {
+            if let badge = key.badge {
+                Text(badge)
+                    .font(.system(
+                        size: height * 0.15,
+                        weight: .semibold,
+                        design: .monospaced
+                    ))
+                    .foregroundStyle(
+                        isOccupied ? color : Color(hex: "#6c7086")
+                    )
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.55)
+                    .padding(5)
+            }
+
+            if source == .registry {
+                registryContent
+            } else {
+                legacyContent
             }
         }
         .frame(width: width, height: height)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(key.isActive
-                    ? (key.color ?? .white).opacity(0.12)
-                    : Color(hex: "#313244").opacity(0.4))
+                .fill(
+                    isOccupied
+                        ? color.opacity(0.12)
+                        : Color(hex: "#313244").opacity(0.28)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(key.isActive
-                    ? (key.color ?? .white).opacity(0.2)
-                    : Color(hex: "#cdd6f4").opacity(0.04), lineWidth: 1)
+                .stroke(
+                    isOccupied
+                        ? color.opacity(0.24)
+                        : Color(hex: "#cdd6f4").opacity(0.06),
+                    lineWidth: 1
+                )
         )
+    }
+
+    private var registryContent: some View {
+        VStack(spacing: 3) {
+            Spacer(minLength: 4)
+            if let icon = key.icon {
+                RegistryIcon(icon: icon, size: height * 0.34)
+                    .foregroundStyle(color)
+            }
+            if let actionLabel = key.actionLabel {
+                Text(actionLabel)
+                    .font(.system(size: height * 0.14, weight: .medium))
+                    .foregroundStyle(Color(hex: "#bac2de"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+            } else if let freeLabel = key.freeLabel {
+                Text(freeLabel)
+                    .font(.system(size: height * 0.13, design: .monospaced))
+                    .foregroundStyle(Color(hex: "#585b70"))
+            }
+            Spacer(minLength: 4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 3)
+    }
+
+    private var legacyContent: some View {
+        VStack(spacing: 1) {
+            Text(key.badge ?? "")
+                .font(.system(
+                    size: height * (isOccupied ? 0.27 : 0.23),
+                    weight: isOccupied ? .bold : .regular,
+                    design: .monospaced
+                ))
+                .foregroundStyle(
+                    isOccupied ? color : Color(hex: "#45475a")
+                )
+            if let actionLabel = key.actionLabel {
+                Text(actionLabel)
+                    .font(.system(size: height * 0.18, design: .monospaced))
+                    .foregroundStyle(Color(hex: "#bac2de"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+
+@available(macOS 14, *)
+private struct RegistryIcon: View {
+    let icon: RegistryKeyIcon
+    let size: CGFloat
+
+    var body: some View {
+        if icon.kind == "app-font" {
+            Text(icon.token)
+                .font(.custom("sketchybar-app-font", size: size))
+                .lineLimit(1)
+        } else {
+            Image(systemName: icon.token)
+                .font(.system(size: size, weight: .medium))
+        }
     }
 }

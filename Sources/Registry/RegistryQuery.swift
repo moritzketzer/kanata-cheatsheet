@@ -10,10 +10,19 @@ struct RegistryQuery: Equatable {
     var ownership: String?
     var diagnosticsOnly = false
 
-    func filter(_ registry: KeybindingRegistry) -> [RegistryBinding] {
+    func filter(
+        _ registry: KeybindingRegistry,
+        defaultBindingIDs: Set<String>? = nil
+    ) -> [RegistryBinding] {
         let needle = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return registry.bindings
             .filter { binding in
+                if needle.isEmpty,
+                   let defaultBindingIDs,
+                   !defaultBindingIDs.contains(binding.id)
+                {
+                    return false
+                }
                 if let provider, binding.provider != provider { return false }
                 if let application, binding.context.application != application { return false }
                 if let mode, binding.context.mode != mode { return false }

@@ -2,22 +2,8 @@ import SwiftUI
 
 
 private enum RegistrySidebarSelection: Hashable {
-    case all
+    case mine
     case modifierSpace
-    case diagnostics
-    case freeModifierSpace
-    case provider(String)
-    case application(String)
-    case mode(String)
-    case layer(String)
-}
-
-
-private enum RegistryViewMode: String, CaseIterable, Identifiable {
-    case list = "List"
-    case keyboard = "Keyboard"
-
-    var id: String { rawValue }
 }
 
 
@@ -26,11 +12,8 @@ struct RegistryBrowserView: View {
     let registry: KeybindingRegistry?
     let loadError: String?
 
-    @State private var sidebarSelection: RegistrySidebarSelection = .all
+    @State private var sidebarSelection: RegistrySidebarSelection = .mine
     @State private var search = ""
-    @State private var ownership = "all"
-    @State private var diagnosticsOnly = false
-    @State private var viewMode: RegistryViewMode = .list
     @State private var selectedBindingID: String?
 
     init(registryResult: Result<KeybindingRegistry, Error>) {
@@ -59,43 +42,10 @@ struct RegistryBrowserView: View {
     private func sidebar(_ registry: KeybindingRegistry) -> some View {
         List(selection: $sidebarSelection) {
             Section("Registry") {
-                Label("All Bindings", systemImage: "list.bullet")
-                    .tag(RegistrySidebarSelection.all)
+                Label("My Bindings", systemImage: "list.bullet")
+                    .tag(RegistrySidebarSelection.mine)
                 Label("Modifier + Space", systemImage: "keyboard")
                     .tag(RegistrySidebarSelection.modifierSpace)
-                Label("Diagnostics", systemImage: "exclamationmark.triangle")
-                    .tag(RegistrySidebarSelection.diagnostics)
-                Label("Free Modifier + Space", systemImage: "square.dashed")
-                    .tag(RegistrySidebarSelection.freeModifierSpace)
-            }
-
-            Section("Providers") {
-                ForEach(registry.providers) { provider in
-                    Label(provider.sourceLabel, systemImage: providerIcon(provider.id))
-                        .tag(RegistrySidebarSelection.provider(provider.id))
-                }
-            }
-
-            if !applications(registry).isEmpty {
-                Section("Applications") {
-                    ForEach(applications(registry), id: \.self) { application in
-                        Label(application, systemImage: "app")
-                            .tag(RegistrySidebarSelection.application(application))
-                    }
-                }
-            }
-
-            if !modes(registry).isEmpty {
-                Section("Contexts") {
-                    ForEach(modes(registry), id: \.self) { mode in
-                        Label(mode, systemImage: "rectangle.3.group")
-                            .tag(RegistrySidebarSelection.mode(mode))
-                    }
-                    ForEach(layers(registry), id: \.self) { layer in
-                        Label("Layer: \(layer)", systemImage: "square.3.layers.3d")
-                            .tag(RegistrySidebarSelection.layer(layer))
-                    }
-                }
             }
         }
         .listStyle(.sidebar)
@@ -113,32 +63,16 @@ struct RegistryBrowserView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Picker("Ownership", selection: $ownership) {
-                    Text("All owners").tag("all")
-                    Text("Enforced").tag("enforced")
-                    Text("Managed profile").tag("managed-profile")
-                    Text("Observed").tag("observed")
-                }
-                .frame(width: 170)
-                Toggle("Diagnostics", isOn: $diagnosticsOnly)
-                    .toggleStyle(.checkbox)
-                Picker("View", selection: $viewMode) {
-                    ForEach(RegistryViewMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 170)
             }
             .padding(16)
 
             Divider()
 
-            if viewMode == .keyboard || sidebarSelection == .freeModifierSpace {
+            if sidebarSelection == .modifierSpace {
                 ModifierSpaceBrowserGrid(
                     registry: registry,
                     matchingBindingIDs: Set(filteredBindings(registry).map(\.id)),
-                    freeOnly: sidebarSelection == .freeModifierSpace
+                    freeOnly: false
                 )
             } else {
                 bindingList(registry)
@@ -175,62 +109,22 @@ struct RegistryBrowserView: View {
     }
 
     private func filteredBindings(_ registry: KeybindingRegistry) -> [RegistryBinding] {
-        var query = RegistryQuery(
-            search: search,
-            ownership: ownership == "all" ? nil : ownership,
-            diagnosticsOnly: diagnosticsOnly || sidebarSelection == .diagnostics
-        )
-        switch sidebarSelection {
-        case .provider(let provider):
-            query.provider = provider
-        case .application(let application):
-            query.application = application
-        case .mode(let mode):
-            query.mode = mode
-        case .layer(let layer):
-            query.layer = layer
-        default:
-            break
-        }
-        let filtered = query.filter(registry)
+        let query = RegistryQuery(search: search)
         if sidebarSelection == .modifierSpace {
             let ids = Set(registry.views.modifierSpace.slots.flatMap(\.bindingIds))
-            return filtered.filter { ids.contains($0.id) }
+            return query.filter(registry).filter { ids.contains($0.id) }
         }
-        return filtered
+        let defaultIDs = Set(
+            registry.views.explorerDefault?.bindingIds
+                ?? registry.views.allBindings.bindingIds
+        )
+        return query.filter(registry, defaultBindingIDs: defaultIDs)
     }
 
     private var sidebarTitle: String {
         switch sidebarSelection {
-        case .all: return "All Bindings"
+        case .mine: return "My Bindings"
         case .modifierSpace: return "Modifier + Space"
-        case .diagnostics: return "Diagnostics"
-        case .freeModifierSpace: return "Free Modifier + Space"
-        case .provider(let provider): return provider
-        case .application(let application): return application
-        case .mode(let mode): return mode
-        case .layer(let layer): return "Layer: \(layer)"
-        }
-    }
-
-    private func applications(_ registry: KeybindingRegistry) -> [String] {
-        Array(Set(registry.bindings.compactMap(\.context.application))).sorted()
-    }
-
-    private func modes(_ registry: KeybindingRegistry) -> [String] {
-        Array(Set(registry.bindings.compactMap(\.context.mode))).sorted()
-    }
-
-    private func layers(_ registry: KeybindingRegistry) -> [String] {
-        Array(Set(registry.bindings.compactMap(\.context.layer))).sorted()
-    }
-
-    private func providerIcon(_ provider: String) -> String {
-        switch provider {
-        case "aerc": return "envelope"
-        case "alttab": return "macwindow.on.rectangle"
-        case "kanata": return "keyboard"
-        default: return "gearshape"
         }
     }
 }
@@ -306,6 +200,14 @@ private struct RegistryBindingInspector: View {
                     InspectorValue(label: "Application", value: binding.context.application)
                     InspectorValue(label: "Mode", value: binding.context.mode)
                     InspectorValue(label: "Layer", value: binding.context.layer)
+                }
+
+                if binding.gesture.position != nil {
+                    inspectorSection("Coordinates") {
+                        InspectorValue(label: "Mine", value: binding.gesture.displayKey)
+                        InspectorValue(label: "Physical", value: binding.gesture.position)
+                        InspectorValue(label: "Source", value: binding.gesture.sourceKey)
+                    }
                 }
 
                 inspectorSection("Ownership") {

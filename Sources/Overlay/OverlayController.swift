@@ -13,14 +13,24 @@ enum OverlayAction: Equatable {
 
 final class OverlayLogic {
     private let config: Config
+    private let registryLayerTriggers: [String: String]
     private(set) var pendingLayer: String?
     private(set) var currentLayer: String?
     private(set) var visibleLayer: String?
     private(set) var isVisible = false
     private(set) var showFreeModifierSpace = false
 
-    init(config: Config) {
+    init(config: Config, registry: KeybindingRegistry? = nil) {
         self.config = config
+        self.registryLayerTriggers = registry?.views.keyboardLayers?.layers.mapValues(\.trigger) ?? [:]
+    }
+
+    private func trigger(for layer: String) -> String? {
+        registryLayerTriggers[layer] ?? config.layers[layer]?.trigger
+    }
+
+    private func hasLayer(_ layer: String) -> Bool {
+        trigger(for: layer) != nil
     }
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
@@ -28,8 +38,8 @@ final class OverlayLogic {
         if layer != "apps" {
             showFreeModifierSpace = false
         }
-        if let layerConfig = config.layers[layer] {
-            if layerConfig.trigger == "manual" {
+        if let trigger = trigger(for: layer) {
+            if trigger == "manual" {
                 pendingLayer = nil
                 // Hide only if we're currently showing a *different* layer.
                 // A LayerChange to the same layer we're showing is the kanata
@@ -66,7 +76,7 @@ final class OverlayLogic {
     func handleMessage(_ message: String) -> OverlayAction {
         if message.hasPrefix("cheatsheet-show:") {
             let layer = String(message.dropFirst("cheatsheet-show:".count))
-            guard config.layers[layer] != nil else { return .none }
+            guard hasLayer(layer) else { return .none }
             if layer != "apps" {
                 showFreeModifierSpace = false
             }
@@ -81,7 +91,7 @@ final class OverlayLogic {
             showFreeModifierSpace.toggle()
             return .refresh
         case "cheatsheet-show":
-            guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
+            guard let layer = currentLayer, hasLayer(layer) else { return .none }
             pendingLayer = nil
             isVisible = true
             visibleLayer = layer
@@ -103,7 +113,7 @@ final class OverlayLogic {
                 showFreeModifierSpace = false
                 return .hide
             }
-            guard let layer = currentLayer, config.layers[layer] != nil else { return .none }
+            guard let layer = currentLayer, hasLayer(layer) else { return .none }
             pendingLayer = nil
             isVisible = true
             visibleLayer = layer
@@ -129,7 +139,7 @@ final class OverlayController {
     init(config: Config, registryResult: Result<KeybindingRegistry, Error>) {
         self.config = config
         self.registry = try? registryResult.get()
-        self.logic = OverlayLogic(config: config)
+        self.logic = OverlayLogic(config: config, registry: self.registry)
     }
 
     func handleLayerChange(_ layer: String) {
@@ -172,26 +182,23 @@ final class OverlayController {
     }
 
     private func showOverlay(for layerName: String) {
-        guard let layerConfig = config.layers[layerName] else { return }
+        guard KeyboardLayerProjector.presentation(
+            layerName: layerName,
+            legacyLayer: config.layers[layerName],
+            registry: registry,
+            showFree: logic.showFreeModifierSpace
+        ) != nil else {
+            return
+        }
 
         hideOverlay()
         currentLayer = layerName
 
         let screen = NSScreen.main ?? NSScreen.screens[0]
-        let screenFrame = screen.frame
 
-        let view = makeKeyboardView(layerName: layerName, layer: layerConfig)
+        let view = makeKeyboardView(layerName: layerName)
         let hostView = NSHostingView(rootView: view)
-        let pct = CGFloat(config.display.width_percent) / 100.0
-        hostView.frame = NSRect(x: 0, y: 0, width: screenFrame.width * pct, height: screenFrame.height * 0.8)
-        let fittingSize = hostView.fittingSize
-
-        let panelRect = NSRect(
-            x: screenFrame.midX - fittingSize.width / 2,
-            y: screenFrame.midY - fittingSize.height / 2,
-            width: fittingSize.width,
-            height: fittingSize.height
-        )
+        let panelRect = fit(hostView, on: screen)
 
         let panel = OverlayPanel(contentRect: panelRect)
         panel.contentView = hostView
@@ -209,10 +216,10 @@ final class OverlayController {
         Log.info("Showing overlay for layer: \(layerName)")
     }
 
-    private func makeKeyboardView(layerName: String, layer: Config.Layer) -> KeyboardView {
+    private func makeKeyboardView(layerName: String) -> KeyboardView {
         KeyboardView(
             layerName: layerName,
-            layer: layer,
+            legacyLayer: config.layers[layerName],
             display: config.display,
             registry: registry,
             showFreeModifierSpace: logic.showFreeModifierSpace
@@ -222,24 +229,31 @@ final class OverlayController {
     private func refreshOverlay() {
         guard
             let currentLayer,
-            let layerConfig = config.layers[currentLayer],
             let hostView,
             let panel
         else { return }
-        hostView.rootView = makeKeyboardView(layerName: currentLayer, layer: layerConfig)
+        hostView.rootView = makeKeyboardView(layerName: currentLayer)
 
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        panel.setFrame(fit(hostView, on: screen), display: true)
+    }
+
+    private func fit(
+        _ hostView: NSHostingView<KeyboardView>,
+        on screen: NSScreen
+    ) -> NSRect {
         let screenFrame = screen.frame
+        let targetWidth = screenFrame.width * CGFloat(config.display.width_percent) / 100
+        hostView.frame = NSRect(x: 0, y: 0, width: targetWidth, height: 1)
+        hostView.invalidateIntrinsicContentSize()
         hostView.layoutSubtreeIfNeeded()
         let fittingSize = hostView.fittingSize
-        panel.setFrame(
-            NSRect(
-                x: screenFrame.midX - fittingSize.width / 2,
-                y: screenFrame.midY - fittingSize.height / 2,
-                width: fittingSize.width,
-                height: fittingSize.height
-            ),
-            display: true
+        hostView.frame = NSRect(origin: .zero, size: fittingSize)
+        return NSRect(
+            x: screenFrame.midX - fittingSize.width / 2,
+            y: screenFrame.midY - fittingSize.height / 2,
+            width: fittingSize.width,
+            height: fittingSize.height
         )
     }
 

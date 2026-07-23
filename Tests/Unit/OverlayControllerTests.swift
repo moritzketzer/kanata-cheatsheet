@@ -170,6 +170,14 @@ struct OverlayControllerTests {
         #expect(action == .show("finder"))
     }
 
+    @Test("registry-backed layers work without legacy config entries")
+    func registryBackedLayerIsConfigured() {
+        let registry = modifierSpaceRegistry(occupiedCount: 6)
+        let logic = OverlayLogic(config: Config(layers: [:]), registry: registry)
+
+        #expect(logic.handleLayerChange("apps") == .startDelay("apps"))
+    }
+
     @Test("parameterized show ignored if layer not in config")
     func parameterizedShowUnknownLayer() {
         let config = Config(layers: ["nav": Config.Layer(label: "NAV", trigger: "manual", groups: [:])])
@@ -320,7 +328,34 @@ struct OverlayControllerTests {
                     label: "Modifier + Space",
                     slots: slots
                 ),
-                allBindings: AllBindingsView(id: "all-bindings", label: "All Bindings", bindingIds: [])
+                allBindings: AllBindingsView(id: "all-bindings", label: "All Bindings", bindingIds: []),
+                keyboardLayers: KeyboardLayersView(
+                    id: "keyboard-layers",
+                    label: "Keyboard Layers",
+                    geometry: RegistryKeyboardGeometry(
+                        layoutId: "mine-iso",
+                        rows: [
+                            [
+                                RegistryKeyboardPosition(
+                                    position: "KeyW",
+                                    sourceKey: "w",
+                                    mineKey: "L",
+                                    namedKey: nil,
+                                    width: 1
+                                ),
+                            ],
+                        ]
+                    ),
+                    layers: [
+                        "apps": RegistryKeyboardLayer(
+                            id: "apps",
+                            label: "Apps",
+                            trigger: "delay",
+                            groups: [],
+                            cells: [:]
+                        ),
+                    ]
+                )
             )
         )
     }

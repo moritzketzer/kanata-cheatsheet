@@ -39,6 +39,9 @@ private func versionOneFixtureData() throws -> Data {
                     "key": "Space",
                     "modifiers": ["command"],
                     "display": "⌘ Space",
+                    "position": "Space",
+                    "sourceKey": "spc",
+                    "displayKey": "Space",
                 ],
                 "context": ["stage": "system"],
                 "action": ["id": "macos.spotlight", "label": "Spotlight"],
@@ -89,6 +92,74 @@ private func versionOneFixtureData() throws -> Data {
                 "label": "All Bindings",
                 "bindingIds": ["aerc.compose-review.send", "macos.spotlight"],
             ],
+            "explorer-default": [
+                "id": "explorer-default",
+                "label": "My Bindings",
+                "bindingIds": ["macos.spotlight"],
+            ],
+            "keyboard-layers": [
+                "id": "keyboard-layers",
+                "label": "Keyboard Layers",
+                "geometry": [
+                    "layoutId": "mine-iso",
+                    "rows": [
+                        [
+                            [
+                                "position": "KeyW",
+                                "sourceKey": "w",
+                                "mineKey": "L",
+                                "width": 1.0,
+                            ],
+                            [
+                                "position": "IntlBackslash",
+                                "sourceKey": "<",
+                                "namedKey": "Homerow Scroll",
+                                "width": 1.0,
+                            ],
+                            [
+                                "position": "KeyZ",
+                                "sourceKey": "y",
+                                "mineKey": "V",
+                                "width": 1.0,
+                            ],
+                        ],
+                    ],
+                ],
+                "layers": [
+                    "apps": [
+                        "id": "apps",
+                        "label": "Apps",
+                        "trigger": "delay",
+                        "groups": [
+                            ["id": "browse", "color": "#a6e3a1"],
+                        ],
+                        "cells": [
+                            "KeyW": [
+                                "bindingId": "macos.spotlight",
+                                "displayKey": "L",
+                                "sourceKey": "w",
+                                "actionLabel": "Finder",
+                                "group": "browse",
+                                "icon": [
+                                    "kind": "app-font",
+                                    "token": ":finder:",
+                                ],
+                            ],
+                            "IntlBackslash": [
+                                "bindingId": "macos.spotlight",
+                                "displayKey": "Homerow Scroll",
+                                "sourceKey": "<",
+                                "actionLabel": "Scroll",
+                                "group": "browse",
+                                "icon": [
+                                    "kind": "sf-symbol",
+                                    "token": "scroll",
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
         ],
     ]
     return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
@@ -103,6 +174,23 @@ struct RegistryTests {
         #expect(registry.schemaVersion == 1)
         #expect(registry.views.modifierSpace.slots.count == 15)
         #expect(registry.bindings.count == 2)
+    }
+
+    @Test("decodes ISO keyboard layers and both icon kinds")
+    func decodesKeyboardLayers() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let keyboardLayers = try #require(registry.views.keyboardLayers)
+        let geometry = try #require(keyboardLayers.geometry)
+        #expect(geometry.layoutId == "mine-iso")
+        #expect(geometry.rows[0].contains { $0.position == "IntlBackslash" })
+        #expect(
+            keyboardLayers.layers["apps"]?.cells["KeyW"]?.icon
+                == RegistryKeyIcon(kind: "app-font", token: ":finder:")
+        )
+        #expect(
+            keyboardLayers.layers["apps"]?.cells["IntlBackslash"]?.icon
+                == RegistryKeyIcon(kind: "sf-symbol", token: "scroll")
+        )
     }
 
     @Test("search covers gesture action context tags and source")
@@ -127,6 +215,77 @@ struct RegistryTests {
         let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
         let query = RegistryQuery(provider: "aerc", ownership: "observed")
         #expect(query.filter(registry).map(\.id) == ["aerc.compose-review.send"])
+    }
+
+    @Test("Explorer defaults to its projection while search remains global")
+    func explorerProjectionAndGlobalSearch() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let defaultIDs = Set(try #require(registry.views.explorerDefault).bindingIds)
+
+        #expect(
+            RegistryQuery().filter(registry, defaultBindingIDs: defaultIDs).map(\.id)
+                == ["macos.spotlight"]
+        )
+        #expect(
+            RegistryQuery(search: "send")
+                .filter(registry, defaultBindingIDs: defaultIDs)
+                .map(\.id)
+                == ["aerc.compose-review.send"]
+        )
+    }
+
+    @Test("registry layers replace matching legacy layers only")
+    func registryLayersOverrideMatchingLegacyLayers() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let apps = KeyboardLayerProjector.presentation(
+            layerName: "apps",
+            legacyLayer: Config.Layer(label: "Legacy Apps"),
+            registry: registry,
+            showFree: false
+        )
+        let navigation = KeyboardLayerProjector.presentation(
+            layerName: "nav",
+            legacyLayer: Config.Layer(label: "Navigation"),
+            registry: registry,
+            showFree: false
+        )
+
+        #expect(apps?.label == "Apps")
+        #expect(apps?.source == .registry)
+        #expect(navigation?.label == "Navigation")
+        #expect(navigation?.source == .legacy)
+    }
+
+    @Test("occupied-only and show-free projections use mine badges")
+    func projectsOccupiedAndFreeKeys() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let occupied = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let showFree = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: true
+            )
+        )
+        let occupiedL = try #require(occupied.key(at: "KeyW"))
+        let occupiedV = try #require(occupied.key(at: "KeyZ"))
+        let freeV = try #require(showFree.key(at: "KeyZ"))
+
+        #expect(occupiedL.badge == "L")
+        #expect(occupiedL.actionLabel == "Finder")
+        #expect(occupiedL.icon == RegistryKeyIcon(kind: "app-font", token: ":finder:"))
+        #expect(occupiedV.badge == nil)
+        #expect(occupiedV.freeLabel == nil)
+        #expect(freeV.badge == "V")
+        #expect(freeV.freeLabel == "Free")
     }
 
     @Test("invalid schema reports concrete version")

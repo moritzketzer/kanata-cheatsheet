@@ -108,6 +108,32 @@ struct RegistryGesture: Codable, Hashable {
     let modifiers: [String]
     let display: String
     let prefixKey: String?
+    let keySpace: String?
+    let position: String?
+    let sourceKey: String?
+    let displayKey: String?
+
+    init(
+        type: String,
+        key: String,
+        modifiers: [String],
+        display: String,
+        prefixKey: String?,
+        keySpace: String? = nil,
+        position: String? = nil,
+        sourceKey: String? = nil,
+        displayKey: String? = nil
+    ) {
+        self.type = type
+        self.key = key
+        self.modifiers = modifiers
+        self.display = display
+        self.prefixKey = prefixKey
+        self.keySpace = keySpace
+        self.position = position
+        self.sourceKey = sourceKey
+        self.displayKey = displayKey
+    }
 }
 
 
@@ -146,10 +172,26 @@ struct RegistryDiagnostic: Codable, Hashable, Identifiable {
 struct RegistryViews: Codable, Hashable {
     let modifierSpace: ModifierSpaceView
     let allBindings: AllBindingsView
+    let explorerDefault: ExplorerDefaultView?
+    let keyboardLayers: KeyboardLayersView?
+
+    init(
+        modifierSpace: ModifierSpaceView,
+        allBindings: AllBindingsView,
+        explorerDefault: ExplorerDefaultView? = nil,
+        keyboardLayers: KeyboardLayersView? = nil
+    ) {
+        self.modifierSpace = modifierSpace
+        self.allBindings = allBindings
+        self.explorerDefault = explorerDefault
+        self.keyboardLayers = keyboardLayers
+    }
 
     enum CodingKeys: String, CodingKey {
         case modifierSpace = "modifier-space"
         case allBindings = "all-bindings"
+        case explorerDefault = "explorer-default"
+        case keyboardLayers = "keyboard-layers"
     }
 }
 
@@ -177,4 +219,67 @@ struct AllBindingsView: Codable, Hashable, Identifiable {
     let id: String
     let label: String
     let bindingIds: [String]
+}
+
+
+struct ExplorerDefaultView: Codable, Hashable, Identifiable {
+    let id: String
+    let label: String
+    let bindingIds: [String]
+}
+
+
+struct KeyboardLayersView: Codable, Hashable, Identifiable {
+    let id: String
+    let label: String
+    let geometry: RegistryKeyboardGeometry?
+    let layers: [String: RegistryKeyboardLayer]
+}
+
+
+struct RegistryKeyboardGeometry: Codable, Hashable {
+    let layoutId: String
+    let rows: [[RegistryKeyboardPosition]]
+}
+
+
+struct RegistryKeyboardPosition: Codable, Hashable, Identifiable {
+    var id: String { position }
+
+    let position: String
+    let sourceKey: String
+    let mineKey: String?
+    let namedKey: String?
+    let width: Double
+}
+
+
+struct RegistryKeyboardLayer: Codable, Hashable, Identifiable {
+    let id: String
+    let label: String
+    let trigger: String
+    let groups: [RegistryKeyboardGroup]
+    let cells: [String: RegistryKeyboardCell]
+}
+
+
+struct RegistryKeyboardGroup: Codable, Hashable, Identifiable {
+    let id: String
+    let color: String
+}
+
+
+struct RegistryKeyboardCell: Codable, Hashable {
+    let bindingId: String
+    let displayKey: String
+    let sourceKey: String
+    let actionLabel: String
+    let group: String
+    let icon: RegistryKeyIcon
+}
+
+
+struct RegistryKeyIcon: Codable, Hashable {
+    let kind: String
+    let token: String
 }
