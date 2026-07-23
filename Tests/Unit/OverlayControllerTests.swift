@@ -236,9 +236,9 @@ struct OverlayControllerTests {
         #expect(!logic.showFreeModifierSpace)
     }
 
-    @Test("showing free modifier-space slots resizes the overlay")
+    @Test("toggling free modifier-space slots resizes the overlay both ways")
     @MainActor
-    func showingFreeSlotsResizesOverlay() throws {
+    func togglingFreeSlotsResizesOverlayBothWays() throws {
         let display = Config.Display(
             delay_ms: 0,
             fade_in_ms: 0,
@@ -254,14 +254,25 @@ struct OverlayControllerTests {
 
         controller.handleMessage("cheatsheet-show:apps")
         let panel = try #require(NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
-        let occupiedHeight = panel.frame.height
+        let occupiedFrame = panel.frame
 
         controller.handleMessage("cheatsheet-space-toggle-free")
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        let expandedHeight = try #require(panel.contentView).fittingSize.height
-        #expect(expandedHeight > occupiedHeight)
+        let expandedContentView = try #require(panel.contentView)
+        let expandedHeight = expandedContentView.fittingSize.height
         #expect(panel.frame.height >= expandedHeight)
+        #expect(abs(expandedContentView.frame.height - panel.frame.height) <= 1)
+
+        controller.handleMessage("cheatsheet-space-toggle-free")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        let restoredContentView = try #require(panel.contentView)
+        #expect(abs(panel.frame.height - occupiedFrame.height) <= 1)
+        #expect(abs(panel.frame.midY - occupiedFrame.midY) <= 1)
+        #expect(restoredContentView.frame.origin == .zero)
+        #expect(abs(restoredContentView.frame.height - panel.frame.height) <= 1)
+        #expect(restoredContentView.fittingSize.height <= panel.frame.height)
 
         controller.handleMessage("cheatsheet-hide")
     }

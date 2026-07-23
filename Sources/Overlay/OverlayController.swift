@@ -230,13 +230,6 @@ final class OverlayController {
 
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let screenFrame = screen.frame
-        let pct = CGFloat(config.display.width_percent) / 100.0
-        hostView.frame = NSRect(
-            x: 0,
-            y: 0,
-            width: screenFrame.width * pct,
-            height: screenFrame.height * 0.8
-        )
         hostView.layoutSubtreeIfNeeded()
         let fittingSize = hostView.fittingSize
         panel.setFrame(
