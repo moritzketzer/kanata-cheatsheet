@@ -253,13 +253,19 @@ private struct RegistryIcon: View {
     let size: CGFloat
 
     var body: some View {
-        if icon.kind == "app-font" {
-            Text(icon.token)
-                .font(.custom("sketchybar-app-font", size: size))
-                .lineLimit(1)
-        } else {
-            Image(systemName: icon.token)
-                .font(.system(size: size, weight: .medium))
+        Group {
+            if icon.kind == "app-font" {
+                Text(icon.token)
+                    .font(.custom("sketchybar-app-font", size: size))
+                    .lineLimit(1)
+            } else {
+                Image(systemName: icon.token)
+                    .font(.system(size: size, weight: .medium))
+            }
         }
+        .offset(
+            x: RegistryIconLayout.horizontalCorrection(for: icon, size: size)
+        )
+        .opacity(RegistryIconLayout.opacity)
     }
 }
