@@ -258,6 +258,7 @@ struct RegistryKeyboardLayer: Codable, Hashable, Identifiable {
     let id: String
     let label: String
     let trigger: String
+    let overlayGroup: String?
     let groups: [RegistryKeyboardGroup]
     let cells: [String: RegistryKeyboardCell]
 }

@@ -351,6 +351,7 @@ struct OverlayControllerTests {
                             id: "apps",
                             label: "Apps",
                             trigger: "delay",
+                            overlayGroup: nil,
                             groups: [],
                             cells: [:]
                         ),

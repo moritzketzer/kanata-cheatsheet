@@ -2,6 +2,25 @@ import Foundation
 import Testing
 
 
+private func registryCell(
+    _ id: String,
+    _ label: String,
+    _ displayKey: String,
+    _ sourceKey: String,
+    _ group: String,
+    _ iconToken: String
+) -> [String: Any] {
+    [
+        "bindingId": "test.\(id)",
+        "displayKey": displayKey,
+        "sourceKey": sourceKey,
+        "actionLabel": label,
+        "group": group,
+        "icon": ["kind": "app-font", "token": iconToken],
+    ]
+}
+
+
 private func versionOneFixtureData() throws -> Data {
     let slots: [[String: Any]] = (1...15).map { index in
         [
@@ -122,6 +141,36 @@ private func versionOneFixtureData() throws -> Data {
                                 "mineKey": "V",
                                 "width": 1.0,
                             ],
+                            [
+                                "position": "KeyD",
+                                "sourceKey": "d",
+                                "mineKey": "I",
+                                "width": 1.0,
+                            ],
+                            [
+                                "position": "KeyS",
+                                "sourceKey": "s",
+                                "mineKey": "R",
+                                "width": 1.0,
+                            ],
+                            [
+                                "position": "KeyL",
+                                "sourceKey": "l",
+                                "mineKey": "S",
+                                "width": 1.0,
+                            ],
+                            [
+                                "position": "KeyY",
+                                "sourceKey": "z",
+                                "mineKey": "W",
+                                "width": 1.0,
+                            ],
+                            [
+                                "position": "KeyH",
+                                "sourceKey": "h",
+                                "mineKey": "M",
+                                "width": 1.0,
+                            ],
                         ],
                     ],
                 ],
@@ -130,6 +179,7 @@ private func versionOneFixtureData() throws -> Data {
                         "id": "apps",
                         "label": "Apps",
                         "trigger": "delay",
+                        "overlayGroup": "apps",
                         "groups": [
                             ["id": "browse", "color": "#a6e3a1"],
                         ],
@@ -156,6 +206,34 @@ private func versionOneFixtureData() throws -> Data {
                                     "token": "scroll",
                                 ],
                             ],
+                        ],
+                    ],
+                    "apps-alt": [
+                        "id": "apps-alt",
+                        "label": "Alternate Apps",
+                        "trigger": "delay",
+                        "overlayGroup": "apps",
+                        "groups": [
+                            ["id": "browse", "color": "#a6e3a1"],
+                            ["id": "chat", "color": "#fab387"],
+                            ["id": "productivity", "color": "#89b4fa"],
+                        ],
+                        "cells": [
+                            "KeyD": registryCell(
+                                "chrome", "Chrome", "I", "d", "browse", ":google_chrome:"
+                            ),
+                            "KeyS": registryCell(
+                                "acrobat", "Adobe Acrobat", "R", "s", "productivity", ":acrobat:"
+                            ),
+                            "KeyL": registryCell(
+                                "signal", "Signal", "S", "l", "chat", ":signal:"
+                            ),
+                            "KeyY": registryCell(
+                                "whatsapp", "WhatsApp", "W", "z", "chat", ":whats_app:"
+                            ),
+                            "KeyH": registryCell(
+                                "messages", "Messages", "M", "h", "chat", ":messages:"
+                            ),
                         ],
                     ],
                 ],
@@ -191,6 +269,28 @@ struct RegistryTests {
             keyboardLayers.layers["apps"]?.cells["IntlBackslash"]?.icon
                 == RegistryKeyIcon(kind: "sf-symbol", token: "scroll")
         )
+        #expect(keyboardLayers.layers["apps"]?.overlayGroup == "apps")
+        #expect(keyboardLayers.layers["apps-alt"]?.overlayGroup == "apps")
+    }
+
+    @Test("projects all alternate apps from the registry")
+    func projectsAlternateApps() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let alternateApps = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps-alt",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+
+        #expect(alternateApps.label == "Alternate Apps")
+        #expect(alternateApps.key(at: "KeyD")?.actionLabel == "Chrome")
+        #expect(alternateApps.key(at: "KeyS")?.actionLabel == "Adobe Acrobat")
+        #expect(alternateApps.key(at: "KeyL")?.actionLabel == "Signal")
+        #expect(alternateApps.key(at: "KeyY")?.actionLabel == "WhatsApp")
+        #expect(alternateApps.key(at: "KeyH")?.actionLabel == "Messages")
     }
 
     @Test("search covers gesture action context tags and source")
