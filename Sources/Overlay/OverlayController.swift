@@ -5,7 +5,9 @@ import SwiftUI
 
 enum OverlayAction: Equatable {
     case startDelay(String)
+    case retargetDelay(String)
     case show(String)
+    case replace(String)
     case hide
     case refresh
     case none
@@ -14,6 +16,7 @@ enum OverlayAction: Equatable {
 final class OverlayLogic {
     private let config: Config
     private let registryLayerTriggers: [String: String]
+    private let registryOverlayGroups: [String: String]
     private(set) var pendingLayer: String?
     private(set) var currentLayer: String?
     private(set) var visibleLayer: String?
@@ -23,6 +26,7 @@ final class OverlayLogic {
     init(config: Config, registry: KeybindingRegistry? = nil) {
         self.config = config
         self.registryLayerTriggers = registry?.views.keyboardLayers?.layers.mapValues(\.trigger) ?? [:]
+        self.registryOverlayGroups = registry?.views.keyboardLayers?.layers.compactMapValues(\.overlayGroup) ?? [:]
     }
 
     private func trigger(for layer: String) -> String? {
@@ -31,6 +35,15 @@ final class OverlayLogic {
 
     private func hasLayer(_ layer: String) -> Bool {
         trigger(for: layer) != nil
+    }
+
+    private func sharesOverlayGroup(_ first: String?, _ second: String) -> Bool {
+        guard
+            let first,
+            let firstGroup = registryOverlayGroups[first],
+            let secondGroup = registryOverlayGroups[second]
+        else { return false }
+        return firstGroup == secondGroup
     }
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
@@ -52,6 +65,15 @@ final class OverlayLogic {
                 }
                 return .none
             }
+            if isVisible, sharesOverlayGroup(visibleLayer, layer) {
+                pendingLayer = nil
+                visibleLayer = layer
+                return .replace(layer)
+            }
+            if sharesOverlayGroup(pendingLayer, layer) {
+                pendingLayer = layer
+                return .retargetDelay(layer)
+            }
             pendingLayer = layer
             return .startDelay(layer)
         } else {
@@ -66,11 +88,12 @@ final class OverlayLogic {
         }
     }
 
-    func delayExpired(for layer: String) -> OverlayAction {
-        guard pendingLayer == layer else { return .none }
+    func delayExpired() -> OverlayAction {
+        guard let pendingLayer else { return .none }
+        self.pendingLayer = nil
         isVisible = true
-        visibleLayer = layer
-        return .show(layer)
+        visibleLayer = pendingLayer
+        return .show(pendingLayer)
     }
 
     func handleMessage(_ message: String) -> OverlayAction {
@@ -143,9 +166,6 @@ final class OverlayController {
     }
 
     func handleLayerChange(_ layer: String) {
-        delayTimer?.invalidate()
-        delayTimer = nil
-
         let action = logic.handleLayerChange(layer)
         executeAction(action)
     }
@@ -160,14 +180,21 @@ final class OverlayController {
 
     private func executeAction(_ action: OverlayAction) {
         switch action {
-        case .startDelay(let layerName):
+        case .startDelay:
+            delayTimer?.invalidate()
             let delay = Double(config.display.delay_ms) / 1000.0
             delayTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                self?.onDelayExpired(for: layerName)
+                self?.onDelayExpired()
             }
+        case .retargetDelay:
+            break
         case .show(let layerName):
             showOverlay(for: layerName)
+        case .replace(let layerName):
+            replaceOverlay(with: layerName)
         case .hide:
+            delayTimer?.invalidate()
+            delayTimer = nil
             hideOverlay()
         case .refresh:
             refreshOverlay()
@@ -176,8 +203,9 @@ final class OverlayController {
         }
     }
 
-    private func onDelayExpired(for layer: String) {
-        let action = logic.delayExpired(for: layer)
+    private func onDelayExpired() {
+        delayTimer = nil
+        let action = logic.delayExpired()
         executeAction(action)
     }
 
@@ -236,6 +264,19 @@ final class OverlayController {
 
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
         panel.setFrame(fit(hostView, on: screen), display: true)
+    }
+
+    private func replaceOverlay(with layerName: String) {
+        guard
+            let hostView,
+            let panel
+        else { return }
+        currentLayer = layerName
+        hostView.rootView = makeKeyboardView(layerName: layerName)
+
+        let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        panel.setFrame(fit(hostView, on: screen), display: true)
+        Log.info("Replacing overlay content for layer: \(layerName)")
     }
 
     private func fit(

@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import AppKit
 
-@Suite("OverlayController Logic")
+@Suite("OverlayController Logic", .serialized)
 struct OverlayControllerTests {
     private var appsConfig: Config {
         Config(
@@ -53,7 +53,7 @@ struct OverlayControllerTests {
         )
         let logic = OverlayLogic(config: config)
         _ = logic.handleLayerChange("nav")
-        let action = logic.delayExpired(for: "nav")
+        let action = logic.delayExpired()
         #expect(action == .show("nav"))
     }
 
@@ -61,16 +61,43 @@ struct OverlayControllerTests {
     func staleDelayIgnored() {
         let config = Config(
             display: Config.Display(delay_ms: 100),
-            layers: [
-                "nav": Config.Layer(label: "NAV", groups: [:]),
-                "apps": Config.Layer(label: "APPS", groups: [:])
-            ]
+            layers: ["nav": Config.Layer(label: "NAV", groups: [:])]
         )
         let logic = OverlayLogic(config: config)
         _ = logic.handleLayerChange("nav")
-        _ = logic.handleLayerChange("apps")
-        let action = logic.delayExpired(for: "nav")
+        _ = logic.handleLayerChange("mine")
+        let action = logic.delayExpired()
         #expect(action == .none)
+    }
+
+    @Test("visible overlay-group member replaces content in place")
+    func visibleGroupedLayerReplacesInPlace() {
+        let logic = OverlayLogic(config: Config(layers: [:]), registry: modifierSpaceRegistry(occupiedCount: 6))
+        _ = logic.handleLayerChange("apps")
+        _ = logic.delayExpired()
+
+        #expect(logic.handleLayerChange("apps-alt") == .replace("apps-alt"))
+        #expect(logic.visibleLayer == "apps-alt")
+        #expect(logic.handleLayerChange("apps") == .replace("apps"))
+        #expect(logic.visibleLayer == "apps")
+    }
+
+    @Test("pending overlay-group member retargets existing deadline")
+    func pendingGroupedLayerRetargets() {
+        let logic = OverlayLogic(config: Config(layers: [:]), registry: modifierSpaceRegistry(occupiedCount: 6))
+
+        #expect(logic.handleLayerChange("apps") == .startDelay("apps"))
+        #expect(logic.handleLayerChange("apps-alt") == .retargetDelay("apps-alt"))
+        #expect(logic.delayExpired() == .show("apps-alt"))
+    }
+
+    @Test("leaving overlay group hides")
+    func leavingGroupedLayerHides() {
+        let logic = OverlayLogic(config: Config(layers: [:]), registry: modifierSpaceRegistry(occupiedCount: 6))
+        _ = logic.handleLayerChange("apps")
+        _ = logic.delayExpired()
+
+        #expect(logic.handleLayerChange("mine") == .hide)
     }
 
     // MARK: - Manual trigger mode
@@ -126,7 +153,7 @@ struct OverlayControllerTests {
         )
         let logic = OverlayLogic(config: config)
         _ = logic.handleLayerChange("nav")
-        _ = logic.delayExpired(for: "nav")
+        _ = logic.delayExpired()
         let action = logic.handleMessage("cheatsheet-hide")
         #expect(action == .hide)
     }
@@ -217,7 +244,7 @@ struct OverlayControllerTests {
     func togglesFreeSlotsForApps() {
         let logic = OverlayLogic(config: appsConfig)
         _ = logic.handleLayerChange("apps")
-        _ = logic.delayExpired(for: "apps")
+        _ = logic.delayExpired()
         #expect(logic.handleMessage("cheatsheet-space-toggle-free") == .refresh)
         #expect(logic.showFreeModifierSpace)
         #expect(logic.handleMessage("cheatsheet-space-toggle-free") == .refresh)
@@ -228,7 +255,7 @@ struct OverlayControllerTests {
     func leavingAppsResetsFreeSlots() {
         let logic = OverlayLogic(config: appsConfig)
         _ = logic.handleLayerChange("apps")
-        _ = logic.delayExpired(for: "apps")
+        _ = logic.delayExpired()
         _ = logic.handleMessage("cheatsheet-space-toggle-free")
         _ = logic.handleLayerChange("mine")
         #expect(!logic.showFreeModifierSpace)
@@ -239,7 +266,7 @@ struct OverlayControllerTests {
         let config = Config(layers: ["nav": Config.Layer(label: "NAV", groups: [:])])
         let logic = OverlayLogic(config: config)
         _ = logic.handleLayerChange("nav")
-        _ = logic.delayExpired(for: "nav")
+        _ = logic.delayExpired()
         #expect(logic.handleMessage("cheatsheet-space-toggle-free") == .none)
         #expect(!logic.showFreeModifierSpace)
     }
@@ -281,6 +308,69 @@ struct OverlayControllerTests {
         #expect(restoredContentView.frame.origin == .zero)
         #expect(abs(restoredContentView.frame.height - panel.frame.height) <= 1)
         #expect(restoredContentView.fittingSize.height <= panel.frame.height)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("visible grouped layers reuse the same panel")
+    @MainActor
+    func visibleGroupedLayersReusePanel() throws {
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let registry = modifierSpaceRegistry(occupiedCount: 6)
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(registry)
+        )
+
+        controller.handleMessage("cheatsheet-show:apps")
+        let originalPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let originalAlpha = originalPanel.alphaValue
+
+        controller.handleLayerChange("apps-alt")
+        let switchedPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+
+        #expect(switchedPanel === originalPanel)
+        #expect(switchedPanel.isVisible)
+        #expect(switchedPanel.alphaValue == originalAlpha)
+        let contentView = try #require(switchedPanel.contentView)
+        #expect(contentView.fittingSize.height <= switchedPanel.frame.height)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("grouped layer change keeps the original delay deadline")
+    @MainActor
+    func groupedLayerChangeKeepsDelayDeadline() throws {
+        let display = Config.Display(
+            delay_ms: 300,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let registry = modifierSpaceRegistry(occupiedCount: 6)
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(registry)
+        )
+
+        controller.handleLayerChange("apps")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
+        controller.handleLayerChange("apps-alt")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.16))
+
+        let visiblePanel = NSApplication.shared.windows
+            .compactMap { $0 as? OverlayPanel }
+            .last { $0.isVisible }
+        #expect(visiblePanel != nil)
 
         controller.handleMessage("cheatsheet-hide")
     }
@@ -351,7 +441,15 @@ struct OverlayControllerTests {
                             id: "apps",
                             label: "Apps",
                             trigger: "delay",
-                            overlayGroup: nil,
+                            overlayGroup: "apps",
+                            groups: [],
+                            cells: [:]
+                        ),
+                        "apps-alt": RegistryKeyboardLayer(
+                            id: "apps-alt",
+                            label: "Alternate Apps",
+                            trigger: "delay",
+                            overlayGroup: "apps",
                             groups: [],
                             cells: [:]
                         ),
