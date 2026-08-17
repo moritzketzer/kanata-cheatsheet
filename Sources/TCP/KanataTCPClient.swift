@@ -110,21 +110,22 @@ final class KanataTCPClient {
         self.connection = conn
 
         conn.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
-            switch state {
-            case .ready:
+            // Identity guard: a superseded connection must not cancel or
+            // reschedule over the current one.
+            guard let self, self.connection === conn else { return }
+            switch KanataTCPClient.action(for: state) {
+            case .connected:
                 Log.info("Connected to kanata TCP at \(self.host):\(self.port)")
                 DispatchQueue.main.async { self.delegate?.didConnect() }
                 self.receive(on: conn)
-            case .failed(let error):
-                Log.error("TCP connection failed: \(error)")
+            case .retry:
+                Log.error("TCP connection unavailable (\(state)); will retry")
+                conn.cancel()
                 DispatchQueue.main.async {
                     self.delegate?.didDisconnect()
                     self.scheduleReconnect()
                 }
-            case .cancelled:
-                break
-            default:
+            case .ignore:
                 break
             }
         }
