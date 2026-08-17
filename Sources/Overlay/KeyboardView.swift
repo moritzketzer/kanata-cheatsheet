@@ -104,6 +104,29 @@ struct KeyboardView: View {
                 }
             }
 
+            if let thumbs = presentation.defyThumbs {
+                VStack(spacing: 6) {
+                    Text(thumbs.label)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color(hex: "#6c7086"))
+                        .tracking(2)
+                        .textCase(.uppercase)
+
+                    HStack(alignment: .bottom, spacing: keySize * 1.25) {
+                        defyHalf(
+                            top: thumbs.leftTop,
+                            bottom: thumbs.leftBottom,
+                            topOffset: keySize * 0.18
+                        )
+                        defyHalf(
+                            top: thumbs.rightTop,
+                            bottom: thumbs.rightBottom,
+                            topOffset: -keySize * 0.18
+                        )
+                    }
+                }
+            }
+
             if !presentation.groups.isEmpty {
                 HStack(spacing: 24) {
                     ForEach(presentation.groups) { group in
@@ -138,6 +161,39 @@ struct KeyboardView: View {
         )
         .fixedSize()
     }
+
+    private func defyHalf(
+        top: [KeyboardPresentedKey],
+        bottom: [KeyboardPresentedKey],
+        topOffset: CGFloat
+    ) -> some View {
+        let thumbWidth = keySize * 0.88
+        let thumbHeight = keySize * 0.72
+        return VStack(spacing: Self.keySpacing) {
+            HStack(spacing: Self.keySpacing) {
+                ForEach(top) { key in
+                    KeyCell(
+                        key: key,
+                        source: presentation.source,
+                        width: CGFloat(key.width) * thumbWidth,
+                        height: thumbHeight
+                    )
+                }
+            }
+            .offset(x: topOffset)
+
+            HStack(spacing: Self.keySpacing) {
+                ForEach(bottom) { key in
+                    KeyCell(
+                        key: key,
+                        source: presentation.source,
+                        width: CGFloat(key.width) * thumbWidth,
+                        height: thumbHeight
+                    )
+                }
+            }
+        }
+    }
 }
 
 
@@ -149,7 +205,7 @@ struct KeyCell: View {
     let height: CGFloat
 
     private var isOccupied: Bool {
-        key.actionLabel != nil
+        key.actionLabel != nil || key.keyLabel != nil
     }
 
     private var color: Color {
@@ -202,13 +258,26 @@ struct KeyCell: View {
     private var registryContent: some View {
         VStack(spacing: 3) {
             Spacer(minLength: 4)
-            if let icon = key.icon {
+            if let keyLabel = key.keyLabel {
+                Text(keyLabel)
+                    .font(.system(
+                        size: height * 0.28,
+                        weight: .semibold,
+                        design: .monospaced
+                    ))
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+            } else if let icon = key.icon {
                 RegistryIcon(icon: icon, size: height * 0.34)
                     .foregroundStyle(color)
             }
             if let actionLabel = key.actionLabel {
                 Text(actionLabel)
-                    .font(.system(size: height * 0.14, weight: .medium))
+                    .font(.system(
+                        size: height * (key.keyLabel == nil ? 0.14 : 0.12),
+                        weight: .medium
+                    ))
                     .foregroundStyle(Color(hex: "#bac2de"))
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)

@@ -15,12 +15,26 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
     let freeLabel: String?
     let colorHex: String?
     let icon: RegistryKeyIcon?
+    var keyLabel: String? = nil
 }
 
 
 struct KeyboardPresentedGroup: Equatable, Identifiable {
     let id: String
     let colorHex: String
+}
+
+
+struct KeyboardPresentedDefyThumbs: Equatable {
+    let label: String
+    let leftTop: [KeyboardPresentedKey]
+    let leftBottom: [KeyboardPresentedKey]
+    let rightTop: [KeyboardPresentedKey]
+    let rightBottom: [KeyboardPresentedKey]
+
+    var allKeys: [KeyboardPresentedKey] {
+        leftTop + leftBottom + rightTop + rightBottom
+    }
 }
 
 
@@ -31,9 +45,11 @@ struct KeyboardLayerPresentation: Equatable {
     let source: KeyboardPresentationSource
     let rows: [[KeyboardPresentedKey]]
     let groups: [KeyboardPresentedGroup]
+    var defyThumbs: KeyboardPresentedDefyThumbs? = nil
 
     func key(at position: String) -> KeyboardPresentedKey? {
         rows.lazy.flatMap { $0 }.first { $0.id == position }
+            ?? defyThumbs?.allKeys.first { $0.id == position }
     }
 }
 
@@ -98,23 +114,41 @@ enum KeyboardLayerProjector {
            let geometry = keyboardLayers.geometry,
            let layer = keyboardLayers.layers[layerName]
         {
+            let showBaseKeys = layer.showBaseKeys ?? false
             let groupColors = Dictionary(
                 uniqueKeysWithValues: layer.groups.map { ($0.id, $0.color) }
             )
+            let projectPosition = { (position: RegistryKeyboardPosition, isDefy: Bool) in
+                let cell = layer.cells[position.position]
+                let freeMineKey = cell == nil && showFree && !showBaseKeys
+                    ? position.mineKey
+                    : nil
+                return KeyboardPresentedKey(
+                    id: position.position,
+                    width: position.width,
+                    badge: isDefy
+                        ? position.namedKey
+                        : (showBaseKeys ? nil : cell?.displayKey ?? freeMineKey),
+                    actionLabel: cell?.actionLabel,
+                    freeLabel: freeMineKey == nil ? nil : "Free",
+                    colorHex: cell.flatMap { groupColors[$0.group] },
+                    icon: cell?.icon,
+                    keyLabel: showBaseKeys && !isDefy
+                        ? position.mineKey ?? position.namedKey
+                        : nil
+                )
+            }
             let rows = geometry.rows.map { row in
-                row.map { position in
-                    let cell = layer.cells[position.position]
-                    let freeMineKey = cell == nil && showFree ? position.mineKey : nil
-                    return KeyboardPresentedKey(
-                        id: position.position,
-                        width: position.width,
-                        badge: cell?.displayKey ?? freeMineKey,
-                        actionLabel: cell?.actionLabel,
-                        freeLabel: freeMineKey == nil ? nil : "Free",
-                        colorHex: cell.flatMap { groupColors[$0.group] },
-                        icon: cell?.icon
-                    )
-                }
+                row.map { projectPosition($0, false) }
+            }
+            let defyThumbs = geometry.defyThumbs.map { thumbs in
+                KeyboardPresentedDefyThumbs(
+                    label: thumbs.label,
+                    leftTop: thumbs.left.top.map { projectPosition($0, true) },
+                    leftBottom: thumbs.left.bottom.map { projectPosition($0, true) },
+                    rightTop: thumbs.right.top.map { projectPosition($0, true) },
+                    rightBottom: thumbs.right.bottom.map { projectPosition($0, true) }
+                )
             }
             return KeyboardLayerPresentation(
                 name: layerName,
@@ -124,7 +158,8 @@ enum KeyboardLayerProjector {
                 rows: rows,
                 groups: layer.groups.map {
                     KeyboardPresentedGroup(id: $0.id, colorHex: $0.color)
-                }
+                },
+                defyThumbs: defyThumbs
             )
         }
 

@@ -21,6 +21,20 @@ private func registryCell(
 }
 
 
+private func namedKeyboardPosition(
+    _ position: String,
+    _ sourceKey: String,
+    _ namedKey: String
+) -> [String: Any] {
+    [
+        "position": position,
+        "sourceKey": sourceKey,
+        "namedKey": namedKey,
+        "width": 1.0,
+    ]
+}
+
+
 private func versionOneFixtureData() throws -> Data {
     let slots: [[String: Any]] = (1...15).map { index in
         [
@@ -173,8 +187,63 @@ private func versionOneFixtureData() throws -> Data {
                             ],
                         ],
                     ],
+                    "defyThumbs": [
+                        "label": "Defy thumbs",
+                        "left": [
+                            "top": [
+                                namedKeyboardPosition("F13", "f13", "F13"),
+                                namedKeyboardPosition("F14", "f14", "F14"),
+                                namedKeyboardPosition("F15", "f15", "F15"),
+                                namedKeyboardPosition("F16", "f16", "F16"),
+                            ],
+                            "bottom": [
+                                namedKeyboardPosition("Numpad0", "kp0", "Keypad 0"),
+                                namedKeyboardPosition("Numpad1", "kp1", "Keypad 1"),
+                                namedKeyboardPosition("Numpad2", "kp2", "Keypad 2"),
+                                namedKeyboardPosition("F17", "f17", "F17"),
+                            ],
+                        ],
+                        "right": [
+                            "top": [
+                                namedKeyboardPosition("F19", "f19", "F19"),
+                                namedKeyboardPosition("F20", "f20", "F20"),
+                                namedKeyboardPosition("F21", "f21", "F21"),
+                                namedKeyboardPosition("F22", "f22", "F22"),
+                            ],
+                            "bottom": [
+                                namedKeyboardPosition("F18", "f18", "F18"),
+                                namedKeyboardPosition("Numpad3", "kp3", "Keypad 3"),
+                                namedKeyboardPosition("Numpad4", "kp4", "Keypad 4"),
+                                namedKeyboardPosition("Numpad5", "kp5", "Keypad 5"),
+                            ],
+                        ],
+                    ],
                 ],
                 "layers": [
+                    "mine": [
+                        "id": "mine",
+                        "label": "Mine",
+                        "trigger": "manual",
+                        "showBaseKeys": true,
+                        "groups": [
+                            ["id": "layers", "color": "#cba6f7"],
+                        ],
+                        "cells": [
+                            "KeyW": registryCell(
+                                "symbols", "Symbols", "L", "w", "layers", ":finder:"
+                            ),
+                            "F14": registryCell(
+                                "apps", "Space / Apps", "F14", "f14", "layers", ":finder:"
+                            ),
+                        ],
+                    ],
+                    "fn": [
+                        "id": "fn",
+                        "label": "Media · Brightness · F-Keys",
+                        "trigger": "manual",
+                        "groups": [],
+                        "cells": [:],
+                    ],
                     "apps": [
                         "id": "apps",
                         "label": "Apps",
@@ -261,6 +330,18 @@ struct RegistryTests {
         let geometry = try #require(keyboardLayers.geometry)
         #expect(geometry.layoutId == "mine-iso")
         #expect(geometry.rows[0].contains { $0.position == "IntlBackslash" })
+        let defyThumbs = try #require(geometry.defyThumbs)
+        #expect(defyThumbs.left.top.map(\.position) == ["F13", "F14", "F15", "F16"])
+        #expect(
+            defyThumbs.left.bottom.map(\.position)
+                == ["Numpad0", "Numpad1", "Numpad2", "F17"]
+        )
+        #expect(defyThumbs.right.top.map(\.position) == ["F19", "F20", "F21", "F22"])
+        #expect(
+            defyThumbs.right.bottom.map(\.position)
+                == ["F18", "Numpad3", "Numpad4", "Numpad5"]
+        )
+        #expect(keyboardLayers.layers["mine"]?.showBaseKeys == true)
         #expect(
             keyboardLayers.layers["apps"]?.cells["KeyW"]?.icon
                 == RegistryKeyIcon(kind: "app-font", token: ":finder:")
@@ -291,6 +372,46 @@ struct RegistryTests {
         #expect(alternateApps.key(at: "KeyL")?.actionLabel == "Signal")
         #expect(alternateApps.key(at: "KeyY")?.actionLabel == "WhatsApp")
         #expect(alternateApps.key(at: "KeyH")?.actionLabel == "Messages")
+    }
+
+    @Test("base presentation fills Mine labels and keeps semantic actions")
+    func projectsBaseKeysAndActions() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let mine = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+
+        #expect(mine.key(at: "KeyZ")?.keyLabel == "V")
+        #expect(mine.key(at: "KeyZ")?.actionLabel == nil)
+        #expect(mine.key(at: "KeyW")?.keyLabel == "L")
+        #expect(mine.key(at: "KeyW")?.actionLabel == "Symbols")
+    }
+
+    @Test("projects Defy thumbs in checked physical order")
+    func projectsDefyThumbs() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let mine = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let thumbs = try #require(mine.defyThumbs)
+
+        #expect(thumbs.leftTop.map(\.id) == ["F13", "F14", "F15", "F16"])
+        #expect(thumbs.leftBottom.map(\.id) == ["Numpad0", "Numpad1", "Numpad2", "F17"])
+        #expect(thumbs.rightTop.map(\.id) == ["F19", "F20", "F21", "F22"])
+        #expect(thumbs.rightBottom.map(\.id) == ["F18", "Numpad3", "Numpad4", "Numpad5"])
+        #expect(thumbs.leftTop[1].badge == "F14")
+        #expect(thumbs.leftTop[1].actionLabel == "Space / Apps")
+        #expect(mine.key(at: "F14") == thumbs.leftTop[1])
     }
 
     @Test("search covers gesture action context tags and source")

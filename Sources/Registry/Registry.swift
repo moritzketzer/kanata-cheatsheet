@@ -240,6 +240,20 @@ struct KeyboardLayersView: Codable, Hashable, Identifiable {
 struct RegistryKeyboardGeometry: Codable, Hashable {
     let layoutId: String
     let rows: [[RegistryKeyboardPosition]]
+    var defyThumbs: RegistryDefyThumbs? = nil
+}
+
+
+struct RegistryDefyThumbs: Codable, Hashable {
+    let label: String
+    let left: RegistryDefyThumbSide
+    let right: RegistryDefyThumbSide
+}
+
+
+struct RegistryDefyThumbSide: Codable, Hashable {
+    let top: [RegistryKeyboardPosition]
+    let bottom: [RegistryKeyboardPosition]
 }
 
 
@@ -259,6 +273,7 @@ struct RegistryKeyboardLayer: Codable, Hashable, Identifiable {
     let label: String
     let trigger: String
     let overlayGroup: String?
+    var showBaseKeys: Bool? = nil
     let groups: [RegistryKeyboardGroup]
     let cells: [String: RegistryKeyboardCell]
 }

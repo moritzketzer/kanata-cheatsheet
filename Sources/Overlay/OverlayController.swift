@@ -21,6 +21,7 @@ final class OverlayLogic {
     private(set) var currentLayer: String?
     private(set) var visibleLayer: String?
     private(set) var isVisible = false
+    private(set) var isPinned = false
     private(set) var showFreeModifierSpace = false
 
     init(config: Config, registry: KeybindingRegistry? = nil) {
@@ -50,6 +51,20 @@ final class OverlayLogic {
         currentLayer = layer
         if layer != "apps" {
             showFreeModifierSpace = false
+        }
+        if isPinned, hasLayer(layer) {
+            pendingLayer = nil
+            guard visibleLayer != layer else { return .none }
+            visibleLayer = layer
+            if isVisible {
+                return .replace(layer)
+            }
+            isVisible = true
+            return .show(layer)
+        }
+        if isPinned {
+            pendingLayer = nil
+            return .none
         }
         if let trigger = trigger(for: layer) {
             if trigger == "manual" {
@@ -97,6 +112,23 @@ final class OverlayLogic {
     }
 
     func handleMessage(_ message: String) -> OverlayAction {
+        if message.hasPrefix("cheatsheet-pin-toggle:") {
+            if isPinned {
+                isPinned = false
+                pendingLayer = nil
+                showFreeModifierSpace = false
+                isVisible = false
+                visibleLayer = nil
+                return .hide
+            }
+            let layer = String(message.dropFirst("cheatsheet-pin-toggle:".count))
+            guard hasLayer(layer) else { return .none }
+            pendingLayer = nil
+            isPinned = true
+            isVisible = true
+            visibleLayer = layer
+            return .show(layer)
+        }
         if message.hasPrefix("cheatsheet-show:") {
             let layer = String(message.dropFirst("cheatsheet-show:".count))
             guard hasLayer(layer) else { return .none }
@@ -121,6 +153,7 @@ final class OverlayLogic {
             return .show(layer)
         case "cheatsheet-hide":
             pendingLayer = nil
+            isPinned = false
             showFreeModifierSpace = false
             if isVisible {
                 isVisible = false

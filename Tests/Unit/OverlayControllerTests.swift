@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AppKit
+import SwiftUI
 
 @Suite("OverlayController Logic", .serialized)
 struct OverlayControllerTests {
@@ -179,6 +180,89 @@ struct OverlayControllerTests {
         _ = logic.handleMessage("cheatsheet-show")
         let action = logic.handleLayerChange("mine")
         #expect(action == .hide)
+    }
+
+    // MARK: - Pinned layer lens
+
+    @Test("pin toggle anchors Mine even while Apps is current")
+    func pinToggleAnchorsMine() {
+        let config = Config(
+            layers: [
+                "apps": Config.Layer(label: "APPS", groups: [:]),
+                "mine": Config.Layer(label: "MINE", trigger: "manual", groups: [:]),
+            ]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleLayerChange("apps")
+
+        let action = logic.handleMessage("cheatsheet-pin-toggle:mine")
+
+        #expect(action == .show("mine"))
+        #expect(logic.pendingLayer == nil)
+        #expect(logic.visibleLayer == "mine")
+        #expect(logic.isVisible)
+    }
+
+    @Test("pinned lens replaces registered layers immediately")
+    func pinnedLensReplacesRegisteredLayer() {
+        let config = Config(
+            layers: [
+                "mine": Config.Layer(label: "MINE", trigger: "manual", groups: [:]),
+                "fn": Config.Layer(label: "FN", trigger: "manual", groups: [:]),
+            ]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleMessage("cheatsheet-pin-toggle:mine")
+
+        #expect(logic.handleLayerChange("fn") == .replace("fn"))
+        #expect(logic.visibleLayer == "fn")
+        #expect(logic.isPinned)
+    }
+
+    @Test("pinned lens keeps its presentation for unknown transient layers")
+    func pinnedLensKeepsPresentationForUnknownLayer() {
+        let config = Config(
+            layers: [
+                "mine": Config.Layer(label: "MINE", trigger: "manual", groups: [:]),
+            ]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleMessage("cheatsheet-pin-toggle:mine")
+
+        #expect(logic.handleLayerChange("mine-plain") == .none)
+        #expect(logic.visibleLayer == "mine")
+        #expect(logic.isVisible)
+        #expect(logic.isPinned)
+    }
+
+    @Test("pin toggle hides and clears pinned state on second invocation")
+    func pinToggleTurnsOff() {
+        let config = Config(
+            layers: [
+                "mine": Config.Layer(label: "MINE", trigger: "manual", groups: [:]),
+            ]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleMessage("cheatsheet-pin-toggle:mine")
+
+        #expect(logic.handleMessage("cheatsheet-pin-toggle:mine") == .hide)
+        #expect(!logic.isPinned)
+        #expect(!logic.isVisible)
+        #expect(logic.visibleLayer == nil)
+    }
+
+    @Test("hide message clears pinned state")
+    func hideMessageClearsPinnedState() {
+        let config = Config(
+            layers: [
+                "mine": Config.Layer(label: "MINE", trigger: "manual", groups: [:]),
+            ]
+        )
+        let logic = OverlayLogic(config: config)
+        _ = logic.handleMessage("cheatsheet-pin-toggle:mine")
+
+        #expect(logic.handleMessage("cheatsheet-hide") == .hide)
+        #expect(!logic.isPinned)
     }
 
     // MARK: - Parameterized show + same-layer LayerChange
@@ -375,6 +459,55 @@ struct OverlayControllerTests {
         controller.handleMessage("cheatsheet-hide")
     }
 
+    @Test("pinned Mine and Fn render Defy rows in one fitted panel")
+    @MainActor
+    func pinnedMineFnCycleRendersDefyRows() throws {
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let baseView = NSHostingView(rootView: KeyboardView(
+            layerName: "mine",
+            legacyLayer: nil,
+            display: display,
+            registry: pinnedLensRegistry(includeDefy: false)
+        ))
+        let defyView = NSHostingView(rootView: KeyboardView(
+            layerName: "mine",
+            legacyLayer: nil,
+            display: display,
+            registry: pinnedLensRegistry()
+        ))
+        #expect(defyView.fittingSize.height > baseView.fittingSize.height)
+
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(pinnedLensRegistry())
+        )
+
+        controller.handleMessage("cheatsheet-pin-toggle:mine")
+        let minePanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        controller.handleLayerChange("fn")
+        let fnPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        #expect(fnPanel === minePanel)
+        #expect(try #require(fnPanel.contentView).fittingSize.height <= fnPanel.frame.height)
+
+        controller.handleLayerChange("mine")
+        let restoredPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        #expect(restoredPanel === minePanel)
+        #expect(try #require(restoredPanel.contentView).fittingSize.height <= restoredPanel.frame.height)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
     private func modifierSpaceRegistry(occupiedCount: Int) -> KeybindingRegistry {
         let binding = RegistryBinding(
             id: "test.action",
@@ -450,6 +583,106 @@ struct OverlayControllerTests {
                             label: "Alternate Apps",
                             trigger: "delay",
                             overlayGroup: "apps",
+                            groups: [],
+                            cells: [:]
+                        ),
+                    ]
+                )
+            )
+        )
+    }
+
+    private func pinnedLensRegistry(includeDefy: Bool = true) -> KeybindingRegistry {
+        let rows = (0..<5).map { row in
+            (0..<14).map { column in
+                RegistryKeyboardPosition(
+                    position: "Main\(row)-\(column)",
+                    sourceKey: "main\(row)-\(column)",
+                    mineKey: "K\(row)-\(column)",
+                    namedKey: nil,
+                    width: 1
+                )
+            }
+        }
+        let position = { (name: String, source: String) in
+            RegistryKeyboardPosition(
+                position: name,
+                sourceKey: source,
+                mineKey: nil,
+                namedKey: name,
+                width: 1
+            )
+        }
+        let defy = RegistryDefyThumbs(
+            label: "Defy thumbs",
+            left: RegistryDefyThumbSide(
+                top: [
+                    position("F13", "f13"), position("F14", "f14"),
+                    position("F15", "f15"), position("F16", "f16"),
+                ],
+                bottom: [
+                    position("Numpad0", "kp0"), position("Numpad1", "kp1"),
+                    position("Numpad2", "kp2"), position("F17", "f17"),
+                ]
+            ),
+            right: RegistryDefyThumbSide(
+                top: [
+                    position("F19", "f19"), position("F20", "f20"),
+                    position("F21", "f21"), position("F22", "f22"),
+                ],
+                bottom: [
+                    position("F18", "f18"), position("Numpad3", "kp3"),
+                    position("Numpad4", "kp4"), position("Numpad5", "kp5"),
+                ]
+            )
+        )
+        let freeSlots = (0..<15).map { index in
+            ModifierSpaceSlot(
+                modifiers: [],
+                display: "slot-\(index)",
+                state: "free",
+                bindingIds: []
+            )
+        }
+        return KeybindingRegistry(
+            schemaVersion: 1,
+            providers: [],
+            bindings: [],
+            diagnostics: [],
+            views: RegistryViews(
+                modifierSpace: ModifierSpaceView(
+                    id: "modifier-space",
+                    label: "Modifier + Space",
+                    slots: freeSlots
+                ),
+                allBindings: AllBindingsView(
+                    id: "all-bindings",
+                    label: "All Bindings",
+                    bindingIds: []
+                ),
+                keyboardLayers: KeyboardLayersView(
+                    id: "keyboard-layers",
+                    label: "Keyboard Layers",
+                    geometry: RegistryKeyboardGeometry(
+                        layoutId: "mine-iso",
+                        rows: rows,
+                        defyThumbs: includeDefy ? defy : nil
+                    ),
+                    layers: [
+                        "mine": RegistryKeyboardLayer(
+                            id: "mine",
+                            label: "Mine",
+                            trigger: "manual",
+                            overlayGroup: nil,
+                            showBaseKeys: true,
+                            groups: [],
+                            cells: [:]
+                        ),
+                        "fn": RegistryKeyboardLayer(
+                            id: "fn",
+                            label: "Media · Brightness · F-Keys",
+                            trigger: "manual",
+                            overlayGroup: nil,
                             groups: [],
                             cells: [:]
                         ),
