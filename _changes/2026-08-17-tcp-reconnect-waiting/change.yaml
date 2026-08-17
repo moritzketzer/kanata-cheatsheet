@@ -26,3 +26,8 @@ history:
     tool: claude-code
     publication: bundled
     reason: execution continues in this session and worktree
+  - date: 2026-08-17
+    event: execution-started
+    session: 65c0c3db-a0bd-40cf-8317-a40f7e10c8d8
+    tool: claude-code
+    branch: change/tcp-reconnect-waiting
