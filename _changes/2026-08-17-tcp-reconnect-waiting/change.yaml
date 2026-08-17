@@ -1,0 +1,22 @@
+created: 2026-08-17
+history:
+  - date: 2026-08-17
+    event: created
+    session: 65c0c3db-a0bd-40cf-8317-a40f7e10c8d8
+    tool: claude-code
+  - date: 2026-08-17
+    event: spec-written
+    session: 65c0c3db-a0bd-40cf-8317-a40f7e10c8d8
+    tool: claude-code
+  - date: 2026-08-17
+    event: ship-authorized
+    session: 65c0c3db-a0bd-40cf-8317-a40f7e10c8d8
+    tool: claude-code
+    publication: bundled
+    reason: >-
+      Verified Direct-Ship Handoff (source
+      /tmp/kanata-cheatsheet-handoff.iSyYqW/handoff.md): Moritz initiated the
+      handoff in Codex session 01a00ecd-bea5-74a2-b50c-ee53c5e01ba6 with
+      explicit ship intent and autonomous design; this session continues
+      through plan and implementation in the same worktree. No spec-approved:
+      Moritz did not review the written specification.
