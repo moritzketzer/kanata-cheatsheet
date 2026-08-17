@@ -84,3 +84,32 @@ Then the complete suite (`make test`, 62 existing tests) must pass.
 Kanata hotplug/BLE/USB behavior, DriverKit, TCC, layouts, keybindings,
 appfocus, port changes, new daemons/watchers/pollers, UI changes, refactors
 beyond this reconnect path, GitHub releases.
+
+## As Built (2026-08-17)
+
+Implemented exactly as designed; no design deviations.
+
+- `Sources/TCP/KanataTCPClient.swift`: added `TCPStateAction` enum and pure
+  `static func action(for: NWConnection.State) -> TCPStateAction`
+  (`.ready → .connected`; `.failed`/`.waiting` → `.retry`; `.setup`/
+  `.preparing`/`.cancelled`/`@unknown` → `.ignore`); `stateUpdateHandler`
+  switches on the mapping, `.retry` cancels the stalled connection and
+  schedules the single reconnect timer on main; identity guard
+  `self.connection === conn` drops superseded connections' events.
+- `Tests/Unit/TCPReconnectTests.swift`: 4 new tests; the `.waiting
+  (ECONNREFUSED) → .retry` regression test was verified RED at base
+  (`action(for:)` did not compile) before implementation.
+- Verification: `make test` 66 tests / 7 suites pass (baseline 62/6);
+  `make all` builds. Commits `05bf098` (test+seam), `ab7b8ab` (handler).
+- Independent review (fresh-context reviewer): approve-with-minors; reran
+  the suite independently. Three Minor, non-blocking findings, none fixed
+  pre-merge by reviewer recommendation: (1) pre-existing unsynchronized
+  cross-thread access to `connection` (follow-up: queue-confine mutations),
+  (2) narrow TOCTOU in the identity guard sharing the same root cause,
+  self-healing, strictly narrower than base, (3) base-identical benign
+  double-reschedule after receive-error + `.failed`. Also noted adjacent
+  pre-existing: stale `buffer` not cleared on reconnect (dropped, not
+  duplicated, first line); `stop()` currently has no caller.
+- Unresolved at archive time: nix pin (0.2.1), Macserver build, deployment,
+  and live reconnect verification continue in `nix-config` per the
+  Direct-Ship handoff; results reported in the worker session.
