@@ -44,6 +44,12 @@ enum KanataParseError: Error {
 
 // MARK: - TCP Client
 
+enum TCPStateAction: Equatable {
+    case connected
+    case retry
+    case ignore
+}
+
 protocol KanataTCPClientDelegate: AnyObject {
     func didReceiveEvent(_ event: KanataEvent)
     func didConnect()
@@ -64,6 +70,22 @@ final class KanataTCPClient {
         self.host = host
         self.port = UInt16(port)
         self.reconnectInterval = reconnectInterval
+    }
+
+    /// Pure mapping from NWConnection state to client action.
+    /// `.waiting` must retry: on loopback a refused connection never gets a
+    /// path-change event, so waiting strands the client forever.
+    static func action(for state: NWConnection.State) -> TCPStateAction {
+        switch state {
+        case .ready:
+            return .connected
+        case .failed, .waiting:
+            return .retry
+        case .setup, .preparing, .cancelled:
+            return .ignore
+        @unknown default:
+            return .ignore
+        }
     }
 
     func start() {
