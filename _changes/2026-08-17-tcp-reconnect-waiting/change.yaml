@@ -20,3 +20,9 @@ history:
       explicit ship intent and autonomous design; this session continues
       through plan and implementation in the same worktree. No spec-approved:
       Moritz did not review the written specification.
+  - date: 2026-08-17
+    event: plan-written
+    session: 65c0c3db-a0bd-40cf-8317-a40f7e10c8d8
+    tool: claude-code
+    publication: bundled
+    reason: execution continues in this session and worktree
