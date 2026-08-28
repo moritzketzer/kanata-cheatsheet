@@ -35,13 +35,32 @@ private func namedKeyboardPosition(
 }
 
 
-private func versionOneFixtureData() throws -> Data {
+private func versionOneFixtureData(includeFooter: Bool = true) throws -> Data {
     let slots: [[String: Any]] = (1...15).map { index in
         [
             "modifiers": index == 1 ? ["control"] : ["command"],
             "display": index == 1 ? "⌃ Space" : "⌘ Space",
             "state": index == 1 ? "free" : "occupied",
             "bindingIds": index == 1 ? [] : ["macos.spotlight"],
+        ]
+    }
+    var yabaiLayer: [String: Any] = [
+        "id": "yabai",
+        "label": "Yabai",
+        "trigger": "manual",
+        "groups": [],
+        "cells": [:],
+    ]
+    if includeFooter {
+        yabaiLayer["footer"] = [
+            "sections": [
+                [
+                    "id": "holds",
+                    "title": "Homerow holds",
+                    "columns": ["Keys", "Hold"],
+                    "rows": [["C / H", "Control"], ["R / S", "Option"]],
+                ],
+            ],
         ]
     }
     let payload: [String: Any] = [
@@ -244,6 +263,7 @@ private func versionOneFixtureData() throws -> Data {
                         "groups": [],
                         "cells": [:],
                     ],
+                    "yabai": yabaiLayer,
                     "apps": [
                         "id": "apps",
                         "label": "Apps",
@@ -352,6 +372,37 @@ struct RegistryTests {
         )
         #expect(keyboardLayers.layers["apps"]?.overlayGroup == "apps")
         #expect(keyboardLayers.layers["apps-alt"]?.overlayGroup == "apps")
+    }
+
+    @Test("decodes and projects optional layer footer")
+    func decodesAndProjectsLayerFooter() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let layer = try #require(registry.views.keyboardLayers?.layers["yabai"])
+        let section = try #require(layer.footer?.sections.first)
+
+        #expect(section.id == "holds")
+        #expect(section.title == "Homerow holds")
+        #expect(section.columns == ["Keys", "Hold"])
+        #expect(section.rows == [["C / H", "Control"], ["R / S", "Option"]])
+
+        let presentation = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "yabai",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        #expect(presentation.footer == layer.footer)
+    }
+
+    @Test("decodes schema one layer without optional footer")
+    func decodesLayerWithoutFooter() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionOneFixtureData(includeFooter: false)
+        )
+        let layer = try #require(registry.views.keyboardLayers?.layers["yabai"])
+        #expect(layer.footer == nil)
     }
 
     @Test("projects all alternate apps from the registry")

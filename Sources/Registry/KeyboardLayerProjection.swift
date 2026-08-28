@@ -46,6 +46,7 @@ struct KeyboardLayerPresentation: Equatable {
     let rows: [[KeyboardPresentedKey]]
     let groups: [KeyboardPresentedGroup]
     var defyThumbs: KeyboardPresentedDefyThumbs? = nil
+    var footer: RegistryLayerFooter? = nil
 
     func key(at position: String) -> KeyboardPresentedKey? {
         rows.lazy.flatMap { $0 }.first { $0.id == position }
@@ -159,7 +160,8 @@ enum KeyboardLayerProjector {
                 groups: layer.groups.map {
                     KeyboardPresentedGroup(id: $0.id, colorHex: $0.color)
                 },
-                defyThumbs: defyThumbs
+                defyThumbs: defyThumbs,
+                footer: layer.footer
             )
         }
 

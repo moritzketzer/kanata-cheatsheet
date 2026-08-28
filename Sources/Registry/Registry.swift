@@ -274,8 +274,22 @@ struct RegistryKeyboardLayer: Codable, Hashable, Identifiable {
     let trigger: String
     let overlayGroup: String?
     var showBaseKeys: Bool? = nil
+    var footer: RegistryLayerFooter? = nil
     let groups: [RegistryKeyboardGroup]
     let cells: [String: RegistryKeyboardCell]
+}
+
+
+struct RegistryLayerFooter: Codable, Hashable {
+    let sections: [RegistryLayerFooterSection]
+}
+
+
+struct RegistryLayerFooterSection: Codable, Hashable, Identifiable {
+    let id: String
+    let title: String
+    let columns: [String]
+    let rows: [[String]]
 }
 
 
