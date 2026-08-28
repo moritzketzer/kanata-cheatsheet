@@ -143,6 +143,12 @@ struct KeyboardView: View {
                 .padding(.top, 4)
             }
 
+            if let footer = presentation.footer {
+                Divider()
+                    .overlay(Color(hex: "#45475a"))
+                LayerFooterView(footer: footer, availableWidth: contentWidth)
+            }
+
             if presentation.name == "apps", let registry {
                 Divider()
                     .overlay(Color(hex: "#45475a"))
