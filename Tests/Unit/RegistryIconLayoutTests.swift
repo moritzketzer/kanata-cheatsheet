@@ -18,7 +18,7 @@ struct RegistryIconLayoutTests {
             size: 40
         )
 
-        #expect(safariCorrection > 0)
+        #expect(abs(safariCorrection - 8.3) < 0.25)
         #expect(cmuxCorrection > safariCorrection)
     }
 
