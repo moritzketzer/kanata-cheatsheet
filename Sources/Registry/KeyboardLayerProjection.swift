@@ -121,22 +121,24 @@ enum KeyboardLayerProjector {
             )
             let projectPosition = { (position: RegistryKeyboardPosition, isDefy: Bool) in
                 let cell = layer.cells[position.position]
+                let isPassthrough = cell?.group == "passthrough"
                 let freeMineKey = cell == nil && showFree && !showBaseKeys
                     ? position.mineKey
+                    : nil
+                let baseBadge = showBaseKeys
+                    ? position.mineKey ?? position.namedKey
                     : nil
                 return KeyboardPresentedKey(
                     id: position.position,
                     width: position.width,
                     badge: isDefy
                         ? position.namedKey
-                        : (showBaseKeys ? nil : cell?.displayKey ?? freeMineKey),
-                    actionLabel: cell?.actionLabel,
+                        : baseBadge ?? cell?.displayKey ?? freeMineKey,
+                    actionLabel: isPassthrough ? nil : cell?.actionLabel,
                     freeLabel: freeMineKey == nil ? nil : "Free",
-                    colorHex: cell.flatMap { groupColors[$0.group] },
-                    icon: cell?.icon,
-                    keyLabel: showBaseKeys && !isDefy
-                        ? position.mineKey ?? position.namedKey
-                        : nil
+                    colorHex: isPassthrough ? nil : cell.flatMap { groupColors[$0.group] },
+                    icon: isPassthrough ? nil : cell?.icon,
+                    keyLabel: nil
                 )
             }
             let rows = geometry.rows.map { row in
@@ -157,7 +159,7 @@ enum KeyboardLayerProjector {
                 trigger: layer.trigger,
                 source: .registry,
                 rows: rows,
-                groups: layer.groups.map {
+                groups: layer.groups.filter { $0.id != "passthrough" }.map {
                     KeyboardPresentedGroup(id: $0.id, colorHex: $0.color)
                 },
                 defyThumbs: defyThumbs,

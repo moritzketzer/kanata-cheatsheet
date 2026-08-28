@@ -8,7 +8,8 @@ private func registryCell(
     _ displayKey: String,
     _ sourceKey: String,
     _ group: String,
-    _ iconToken: String
+    _ iconToken: String,
+    iconKind: String = "app-font"
 ) -> [String: Any] {
     [
         "bindingId": "test.\(id)",
@@ -16,7 +17,7 @@ private func registryCell(
         "sourceKey": sourceKey,
         "actionLabel": label,
         "group": group,
-        "icon": ["kind": "app-font", "token": iconToken],
+        "icon": ["kind": iconKind, "token": iconToken],
     ]
 }
 
@@ -48,8 +49,17 @@ private func versionOneFixtureData(includeFooter: Bool = true) throws -> Data {
         "id": "yabai",
         "label": "Yabai",
         "trigger": "manual",
-        "groups": [],
-        "cells": [:],
+        "showBaseKeys": true,
+        "groups": [
+            ["id": "passthrough", "color": "#6c7086"],
+            ["id": "windows", "color": "#cba6f7"],
+        ],
+        "cells": [
+            "F1": registryCell(
+                "function-1", "F1", "F1", "f1", "passthrough", "keyboard",
+                iconKind: "sf-symbol"
+            ),
+        ],
     ]
     if includeFooter {
         yabaiLayer["footer"] = [
@@ -204,6 +214,7 @@ private func versionOneFixtureData(includeFooter: Bool = true) throws -> Data {
                                 "mineKey": "M",
                                 "width": 1.0,
                             ],
+                            namedKeyboardPosition("F1", "f1", "F1"),
                         ],
                     ],
                     "defyThumbs": [
@@ -437,10 +448,38 @@ struct RegistryTests {
             )
         )
 
-        #expect(mine.key(at: "KeyZ")?.keyLabel == "V")
-        #expect(mine.key(at: "KeyZ")?.actionLabel == nil)
-        #expect(mine.key(at: "KeyW")?.keyLabel == "L")
-        #expect(mine.key(at: "KeyW")?.actionLabel == "Symbols")
+        let empty = try #require(mine.key(at: "KeyZ"))
+        #expect(empty.badge == "V")
+        #expect(empty.keyLabel == nil)
+        #expect(empty.actionLabel == nil)
+        #expect(empty.icon == nil)
+
+        let mapped = try #require(mine.key(at: "KeyW"))
+        #expect(mapped.badge == "L")
+        #expect(mapped.keyLabel == nil)
+        #expect(mapped.actionLabel == "Symbols")
+        #expect(mapped.icon == RegistryKeyIcon(kind: "app-font", token: ":finder:"))
+    }
+
+    @Test("projects passthrough keys quietly and omits their legend group")
+    func projectsPassthroughQuietly() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let yabai = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "yabai",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let f1 = try #require(yabai.key(at: "F1"))
+
+        #expect(f1.badge == "F1")
+        #expect(f1.keyLabel == nil)
+        #expect(f1.actionLabel == nil)
+        #expect(f1.icon == nil)
+        #expect(f1.colorHex == nil)
+        #expect(yabai.groups.map(\.id) == ["windows"])
     }
 
     @Test("projects Defy thumbs in checked physical order")
@@ -552,6 +591,7 @@ struct RegistryTests {
         let freeV = try #require(showFree.key(at: "KeyZ"))
 
         #expect(occupiedL.badge == "L")
+        #expect(occupiedL.keyLabel == nil)
         #expect(occupiedL.actionLabel == "Finder")
         #expect(occupiedL.icon == RegistryKeyIcon(kind: "app-font", token: ":finder:"))
         #expect(occupiedV.badge == nil)
