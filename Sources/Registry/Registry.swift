@@ -305,7 +305,7 @@ struct RegistryKeyboardCell: Codable, Hashable {
     let sourceKey: String
     let actionLabel: String
     let group: String
-    let icon: RegistryKeyIcon
+    let icon: RegistryKeyIcon?
 }
 
 

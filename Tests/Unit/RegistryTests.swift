@@ -36,7 +36,10 @@ private func namedKeyboardPosition(
 }
 
 
-private func versionOneFixtureData(includeFooter: Bool = true) throws -> Data {
+private func versionOneFixtureData(
+    includeFooter: Bool = true,
+    includeIconlessCell: Bool = false
+) throws -> Data {
     let slots: [[String: Any]] = (1...15).map { index in
         [
             "modifiers": index == 1 ? ["control"] : ["command"],
@@ -45,6 +48,9 @@ private func versionOneFixtureData(includeFooter: Bool = true) throws -> Data {
             "bindingIds": index == 1 ? [] : ["macos.spotlight"],
         ]
     }
+    let optionalFinderIcon: Any = includeIconlessCell
+        ? NSNull()
+        : ["kind": "app-font", "token": ":finder:"]
     var yabaiLayer: [String: Any] = [
         "id": "yabai",
         "label": "Yabai",
@@ -290,10 +296,7 @@ private func versionOneFixtureData(includeFooter: Bool = true) throws -> Data {
                                 "sourceKey": "w",
                                 "actionLabel": "Finder",
                                 "group": "browse",
-                                "icon": [
-                                    "kind": "app-font",
-                                    "token": ":finder:",
-                                ],
+                                "icon": optionalFinderIcon,
                             ],
                             "IntlBackslash": [
                                 "bindingId": "macos.spotlight",
@@ -383,6 +386,26 @@ struct RegistryTests {
         )
         #expect(keyboardLayers.layers["apps"]?.overlayGroup == "apps")
         #expect(keyboardLayers.layers["apps-alt"]?.overlayGroup == "apps")
+    }
+
+    @Test("projects an iconless mapped cell with its label and color")
+    func projectsIconlessMappedCell() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionOneFixtureData(includeIconlessCell: true)
+        )
+        let apps = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let finder = try #require(apps.key(at: "KeyW"))
+
+        #expect(finder.actionLabel == "Finder")
+        #expect(finder.colorHex == "#a6e3a1")
+        #expect(finder.icon == nil)
     }
 
     @Test("decodes and projects optional layer footer")
