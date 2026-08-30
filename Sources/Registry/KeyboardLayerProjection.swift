@@ -30,15 +30,10 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
     }
 
     private static func literalGlyph(for token: String) -> String? {
-        let squareSuffix = ".square"
-        if token.hasSuffix(squareSuffix) {
-            let stem = String(token.dropLast(squareSuffix.count))
-            if stem.count == 1, stem.first?.isNumber == true {
-                return stem
-            }
-        }
-
         switch token {
+        case "0.square", "1.square", "2.square", "3.square", "4.square",
+             "5.square", "6.square", "7.square", "8.square", "9.square":
+            return String(token.prefix(1))
         case "plus.square": return "+"
         case "minus.square": return "−"
         case "eurosign.square": return "€"

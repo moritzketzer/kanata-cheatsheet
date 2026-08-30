@@ -395,6 +395,7 @@ struct RegistryTests {
             presentedKey("Future", iconToken: "future.literal.symbol").displayActionLabel
                 == "Future"
         )
+        #expect(presentedKey("４", iconToken: "４.square").displayActionLabel == "４")
     }
 
     @Test("decodes registry version one")
