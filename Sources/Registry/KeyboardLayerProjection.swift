@@ -14,39 +14,18 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
     let actionLabel: String?
     let freeLabel: String?
     let colorHex: String?
-    let icon: RegistryKeyIcon?
+    let primary: RegistryKeyVisual?
+    let holdModifier: String?
+    let explanation: String?
     var keyLabel: String? = nil
 
+    var icon: RegistryKeyIcon? {
+        guard let primary, primary.kind != "glyph" else { return nil }
+        return RegistryKeyIcon(kind: primary.kind, token: primary.token)
+    }
+
     var displayActionLabel: String? {
-        guard let actionLabel,
-              let icon,
-              icon.kind == "sf-symbol",
-              let literalGlyph = Self.literalGlyph(for: icon.token),
-              Self.label(actionLabel, matches: literalGlyph)
-        else {
-            return actionLabel
-        }
-        return nil
-    }
-
-    private static func literalGlyph(for token: String) -> String? {
-        switch token {
-        case "0.square", "1.square", "2.square", "3.square", "4.square",
-             "5.square", "6.square", "7.square", "8.square", "9.square":
-            return String(token.prefix(1))
-        case "plus.square": return "+"
-        case "minus.square": return "−"
-        case "eurosign.square": return "€"
-        case "dollarsign.square": return "$"
-        default: return nil
-        }
-    }
-
-    private static func label(_ label: String, matches literalGlyph: String) -> Bool {
-        if literalGlyph == "−" {
-            return label == "−" || label == "-"
-        }
-        return label == literalGlyph
+        explanation
     }
 }
 
@@ -160,6 +139,24 @@ enum KeyboardLayerProjector {
                 let baseBadge = showBaseKeys
                     ? position.mineKey ?? position.namedKey
                     : nil
+                let primary: RegistryKeyVisual?
+                let holdModifier: String?
+                let explanation: String?
+                if isPassthrough {
+                    primary = nil
+                    holdModifier = nil
+                    explanation = nil
+                } else if let presentation = cell?.presentation {
+                    primary = presentation.primary
+                    holdModifier = presentation.holdModifier
+                    explanation = presentation.explanation
+                } else {
+                    primary = cell?.icon.map {
+                        RegistryKeyVisual(kind: $0.kind, token: $0.token)
+                    }
+                    holdModifier = nil
+                    explanation = cell?.actionLabel
+                }
                 return KeyboardPresentedKey(
                     id: position.position,
                     width: position.width,
@@ -169,7 +166,9 @@ enum KeyboardLayerProjector {
                     actionLabel: isPassthrough ? nil : cell?.actionLabel,
                     freeLabel: freeMineKey == nil ? nil : "Free",
                     colorHex: isPassthrough ? nil : cell.flatMap { groupColors[$0.group] },
-                    icon: isPassthrough ? nil : cell?.icon,
+                    primary: primary,
+                    holdModifier: holdModifier,
+                    explanation: explanation,
                     keyLabel: nil
                 )
             }
@@ -221,7 +220,9 @@ enum KeyboardLayerProjector {
                         actionLabel: binding?.label,
                         freeLabel: nil,
                         colorHex: binding?.color,
-                        icon: nil
+                        primary: nil,
+                        holdModifier: nil,
+                        explanation: binding?.label
                     )
                 }
             },

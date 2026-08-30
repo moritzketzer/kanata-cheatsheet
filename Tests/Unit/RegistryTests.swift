@@ -9,9 +9,10 @@ private func registryCell(
     _ sourceKey: String,
     _ group: String,
     _ iconToken: String,
-    iconKind: String = "app-font"
+    iconKind: String = "app-font",
+    withPresentation: Bool = false
 ) -> [String: Any] {
-    [
+    var cell: [String: Any] = [
         "bindingId": "test.\(id)",
         "displayKey": displayKey,
         "sourceKey": sourceKey,
@@ -19,6 +20,13 @@ private func registryCell(
         "group": group,
         "icon": ["kind": iconKind, "token": iconToken],
     ]
+    if withPresentation {
+        cell["presentation"] = [
+            "primary": ["kind": iconKind, "token": iconToken],
+            "explanation": label,
+        ]
+    }
+    return cell
 }
 
 
@@ -33,25 +41,6 @@ private func namedKeyboardPosition(
         "namedKey": namedKey,
         "width": 1.0,
     ]
-}
-
-
-private func presentedKey(
-    _ actionLabel: String?,
-    iconKind: String? = "sf-symbol",
-    iconToken: String? = nil
-) -> KeyboardPresentedKey {
-    KeyboardPresentedKey(
-        id: "KeyW",
-        width: 1.0,
-        badge: "L",
-        actionLabel: actionLabel,
-        freeLabel: nil,
-        colorHex: "#f9e2af",
-        icon: iconKind.flatMap { kind in
-            iconToken.map { RegistryKeyIcon(kind: kind, token: $0) }
-        }
-    )
 }
 
 
@@ -285,8 +274,21 @@ private func versionOneFixtureData(
                         ],
                         "cells": [
                             "KeyW": registryCell(
-                                "symbols", "Symbols", "L", "w", "layers", ":finder:"
+                                "symbols", "Symbols", "L", "w", "layers", ":finder:",
+                                withPresentation: true
                             ),
+                            "KeyD": [
+                                "bindingId": "test.nav-1",
+                                "displayKey": "I",
+                                "sourceKey": "d",
+                                "actionLabel": "1 · Hold Command",
+                                "group": "layers",
+                                "presentation": [
+                                    "primary": ["kind": "glyph", "token": "1"],
+                                    "holdModifier": "command",
+                                    "explanation": NSNull(),
+                                ],
+                            ],
                             "F14": registryCell(
                                 "apps", "Space / Apps", "F14", "f14", "layers", ":finder:"
                             ),
@@ -368,34 +370,59 @@ private func versionOneFixtureData(
 
 @Suite("Keybinding Registry")
 struct RegistryTests {
-    @Test("hides exact literal SF Symbol labels without dropping semantic data")
-    func hidesExactLiteralLabels() {
-        let digit = presentedKey("4", iconToken: "4.square")
+    @Test("decodes and projects explicit tap hold and explanation roles")
+    func projectsExplicitPresentationRoles() throws {
+        let literal = RegistryKeyVisual(kind: "glyph", token: "1")
+        let expected = RegistryKeyPresentation(
+            primary: literal,
+            holdModifier: "command",
+            explanation: nil
+        )
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let mineLayer = try #require(registry.views.keyboardLayers?.layers["mine"])
+        let mine = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let digit = try #require(mine.key(at: "KeyD"))
+        let symbols = try #require(mine.key(at: "KeyW"))
 
-        #expect(digit.actionLabel == "4")
-        #expect(digit.displayActionLabel == nil)
-        #expect(presentedKey("$", iconToken: "dollarsign.square").displayActionLabel == nil)
-        #expect(presentedKey("−", iconToken: "minus.square").displayActionLabel == nil)
-        #expect(presentedKey("-", iconToken: "minus.square").displayActionLabel == nil)
+        #expect(mineLayer.cells["KeyD"]?.presentation == expected)
+        #expect(digit.actionLabel == "1 · Hold Command")
+        #expect(digit.primary == literal)
+        #expect(digit.holdModifier == "command")
+        #expect(digit.explanation == nil)
+        #expect(
+            symbols.primary
+                == RegistryKeyVisual(kind: "app-font", token: ":finder:")
+        )
+        #expect(symbols.explanation == "Symbols")
     }
 
-    @Test("keeps labels that add meaning or lack a known literal icon")
-    func keepsInformativeLabels() {
-        #expect(
-            presentedKey("1 · Hold Command", iconToken: "1.square").displayActionLabel
-                == "1 · Hold Command"
+    @Test("schema one cells without presentation use legacy icon and label")
+    func projectsLegacyPresentationFallback() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let alternateApps = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps-alt",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
         )
-        #expect(presentedKey(";", iconKind: nil).displayActionLabel == ";")
-        #expect(presentedKey("Copy", iconToken: "doc.on.doc").displayActionLabel == "Copy")
+        let chrome = try #require(alternateApps.key(at: "KeyD"))
+
+        #expect(chrome.actionLabel == "Chrome")
         #expect(
-            presentedKey("Finder", iconKind: "app-font", iconToken: ":finder:")
-                .displayActionLabel == "Finder"
+            chrome.primary
+                == RegistryKeyVisual(kind: "app-font", token: ":google_chrome:")
         )
-        #expect(
-            presentedKey("Future", iconToken: "future.literal.symbol").displayActionLabel
-                == "Future"
-        )
-        #expect(presentedKey("４", iconToken: "４.square").displayActionLabel == "４")
+        #expect(chrome.holdModifier == nil)
+        #expect(chrome.explanation == "Chrome")
     }
 
     @Test("decodes registry version one")

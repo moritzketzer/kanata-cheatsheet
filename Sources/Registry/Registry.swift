@@ -306,10 +306,24 @@ struct RegistryKeyboardCell: Codable, Hashable {
     let actionLabel: String
     let group: String
     let icon: RegistryKeyIcon?
+    let presentation: RegistryKeyPresentation?
 }
 
 
 struct RegistryKeyIcon: Codable, Hashable {
     let kind: String
     let token: String
+}
+
+
+struct RegistryKeyVisual: Codable, Hashable {
+    let kind: String
+    let token: String
+}
+
+
+struct RegistryKeyPresentation: Codable, Hashable {
+    let primary: RegistryKeyVisual
+    let holdModifier: String?
+    let explanation: String?
 }
