@@ -18,3 +18,9 @@ history:
       Moritz used the exact standalone ship trigger after reviewing the
       bounded adaptive-label design; execution continues in this session and
       worktree. No spec-approved event: ship authority applies.
+  - date: 2026-08-30
+    event: plan-written
+    session: 01a04859-33bf-76e3-85ef-39cad30fa0ce
+    tool: codex
+    publication: bundled
+    reason: execution continues in this session and worktree
