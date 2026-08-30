@@ -29,3 +29,9 @@ history:
     session: 01a04859-33bf-76e3-85ef-39cad30fa0ce
     tool: codex
     branch: change/adaptive-label-visibility
+  - date: 2026-08-30
+    event: implementation-published
+    session: 01a04859-33bf-76e3-85ef-39cad30fa0ce
+    tool: codex
+    publication: intermediate
+    reason: the immutable app commit must be visible to fetchFromGitHub before the Nix pin can build
