@@ -33,14 +33,19 @@ private func registryCell(
 private func namedKeyboardPosition(
     _ position: String,
     _ sourceKey: String,
-    _ namedKey: String
+    _ namedKey: String,
+    badge: String? = nil
 ) -> [String: Any] {
-    [
+    var result: [String: Any] = [
         "position": position,
         "sourceKey": sourceKey,
         "namedKey": namedKey,
         "width": 1.0,
     ]
+    if let badge {
+        result["badge"] = badge
+    }
+    return result
 }
 
 
@@ -190,6 +195,7 @@ private func versionOneFixtureData(
                                 "position": "IntlBackslash",
                                 "sourceKey": "<",
                                 "namedKey": "Homerow Scroll",
+                                "badge": "Scroll",
                                 "width": 1.0,
                             ],
                             [
@@ -229,7 +235,17 @@ private func versionOneFixtureData(
                                 "width": 1.0,
                             ],
                             namedKeyboardPosition("F1", "f1", "F1"),
+                            namedKeyboardPosition("ArrowUp", "up", "Up"),
+                            namedKeyboardPosition("ArrowLeft", "left", "Left"),
+                            namedKeyboardPosition("ArrowDown", "down", "Down"),
+                            namedKeyboardPosition("ArrowRight", "rght", "Right"),
                         ],
+                    ],
+                    "arrowCluster": [
+                        "up": namedKeyboardPosition("ArrowUp", "up", "Up"),
+                        "left": namedKeyboardPosition("ArrowLeft", "left", "Left"),
+                        "down": namedKeyboardPosition("ArrowDown", "down", "Down"),
+                        "right": namedKeyboardPosition("ArrowRight", "rght", "Right"),
                     ],
                     "defyThumbs": [
                         "label": "Defy thumbs",
@@ -462,6 +478,41 @@ struct RegistryTests {
         )
         #expect(keyboardLayers.layers["apps"]?.overlayGroup == "apps")
         #expect(keyboardLayers.layers["apps-alt"]?.overlayGroup == "apps")
+    }
+
+    @Test("projects compact badges and one separate arrow cluster")
+    func projectsCompactBadgesAndArrowCluster() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let geometry = try #require(registry.views.keyboardLayers?.geometry)
+        let scroll = try #require(
+            geometry.rows.lazy.flatMap { $0 }.first { $0.position == "IntlBackslash" }
+        )
+        let mine = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let cluster = try #require(mine.arrowCluster)
+
+        #expect(scroll.namedKey == "Homerow Scroll")
+        #expect(scroll.badge == "Scroll")
+        #expect(mine.key(at: "IntlBackslash")?.badge == "Scroll")
+        #expect(cluster.up.id == "ArrowUp")
+        #expect(cluster.left.id == "ArrowLeft")
+        #expect(cluster.down.id == "ArrowDown")
+        #expect(cluster.right.id == "ArrowRight")
+        #expect(
+            Set(mine.rows.flatMap { $0 }.map(\.id)).isDisjoint(
+                with: ["ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"]
+            )
+        )
+        #expect(mine.key(at: "ArrowUp") == cluster.up)
+        #expect(mine.key(at: "ArrowLeft") == cluster.left)
+        #expect(mine.key(at: "ArrowDown") == cluster.down)
+        #expect(mine.key(at: "ArrowRight") == cluster.right)
     }
 
     @Test("projects an iconless mapped cell with its label and color")

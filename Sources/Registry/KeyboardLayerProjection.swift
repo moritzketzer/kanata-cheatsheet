@@ -49,6 +49,18 @@ struct KeyboardPresentedDefyThumbs: Equatable {
 }
 
 
+struct KeyboardPresentedArrowCluster: Equatable {
+    let up: KeyboardPresentedKey
+    let left: KeyboardPresentedKey
+    let down: KeyboardPresentedKey
+    let right: KeyboardPresentedKey
+
+    var allKeys: [KeyboardPresentedKey] {
+        [up, left, down, right]
+    }
+}
+
+
 struct KeyboardLayerPresentation: Equatable {
     let name: String
     let label: String
@@ -57,11 +69,13 @@ struct KeyboardLayerPresentation: Equatable {
     let rows: [[KeyboardPresentedKey]]
     let groups: [KeyboardPresentedGroup]
     var defyThumbs: KeyboardPresentedDefyThumbs? = nil
+    var arrowCluster: KeyboardPresentedArrowCluster? = nil
     var footer: RegistryLayerFooter? = nil
 
     func key(at position: String) -> KeyboardPresentedKey? {
         rows.lazy.flatMap { $0 }.first { $0.id == position }
             ?? defyThumbs?.allKeys.first { $0.id == position }
+            ?? arrowCluster?.allKeys.first { $0.id == position }
     }
 }
 
@@ -136,9 +150,15 @@ enum KeyboardLayerProjector {
                 let freeMineKey = cell == nil && showFree && !showBaseKeys
                     ? position.mineKey
                     : nil
-                let baseBadge = showBaseKeys
-                    ? position.mineKey ?? position.namedKey
-                    : nil
+                let canonicalBadge: String?
+                if isDefy {
+                    canonicalBadge = position.namedKey
+                } else if showBaseKeys {
+                    canonicalBadge = position.mineKey ?? position.namedKey
+                } else {
+                    canonicalBadge = cell?.displayKey ?? freeMineKey
+                }
+                let sourceBadge = canonicalBadge.map { position.badge ?? $0 }
                 let primary: RegistryKeyVisual?
                 let holdModifier: String?
                 let explanation: String?
@@ -160,9 +180,7 @@ enum KeyboardLayerProjector {
                 return KeyboardPresentedKey(
                     id: position.position,
                     width: position.width,
-                    badge: isDefy
-                        ? position.namedKey
-                        : baseBadge ?? cell?.displayKey ?? freeMineKey,
+                    badge: sourceBadge,
                     actionLabel: isPassthrough ? nil : cell?.actionLabel,
                     freeLabel: freeMineKey == nil ? nil : "Free",
                     colorHex: isPassthrough ? nil : cell.flatMap { groupColors[$0.group] },
@@ -172,8 +190,13 @@ enum KeyboardLayerProjector {
                     keyLabel: nil
                 )
             }
+            let arrowPositionIDs = Set(
+                geometry.arrowCluster?.allPositions.map(\.position) ?? []
+            )
             let rows = geometry.rows.map { row in
-                row.map { projectPosition($0, false) }
+                row
+                    .filter { !arrowPositionIDs.contains($0.position) }
+                    .map { projectPosition($0, false) }
             }
             let defyThumbs = geometry.defyThumbs.map { thumbs in
                 KeyboardPresentedDefyThumbs(
@@ -182,6 +205,14 @@ enum KeyboardLayerProjector {
                     leftBottom: thumbs.left.bottom.map { projectPosition($0, true) },
                     rightTop: thumbs.right.top.map { projectPosition($0, true) },
                     rightBottom: thumbs.right.bottom.map { projectPosition($0, true) }
+                )
+            }
+            let arrowCluster = geometry.arrowCluster.map { cluster in
+                KeyboardPresentedArrowCluster(
+                    up: projectPosition(cluster.up, false),
+                    left: projectPosition(cluster.left, false),
+                    down: projectPosition(cluster.down, false),
+                    right: projectPosition(cluster.right, false)
                 )
             }
             return KeyboardLayerPresentation(
@@ -194,6 +225,7 @@ enum KeyboardLayerProjector {
                     KeyboardPresentedGroup(id: $0.id, colorHex: $0.color)
                 },
                 defyThumbs: defyThumbs,
+                arrowCluster: arrowCluster,
                 footer: layer.footer
             )
         }

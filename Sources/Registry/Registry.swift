@@ -241,6 +241,19 @@ struct RegistryKeyboardGeometry: Codable, Hashable {
     let layoutId: String
     let rows: [[RegistryKeyboardPosition]]
     var defyThumbs: RegistryDefyThumbs? = nil
+    var arrowCluster: RegistryArrowCluster? = nil
+}
+
+
+struct RegistryArrowCluster: Codable, Hashable {
+    let up: RegistryKeyboardPosition
+    let left: RegistryKeyboardPosition
+    let down: RegistryKeyboardPosition
+    let right: RegistryKeyboardPosition
+
+    var allPositions: [RegistryKeyboardPosition] {
+        [up, left, down, right]
+    }
 }
 
 
@@ -264,6 +277,7 @@ struct RegistryKeyboardPosition: Codable, Hashable, Identifiable {
     let sourceKey: String
     let mineKey: String?
     let namedKey: String?
+    var badge: String? = nil
     let width: Double
 }
 
