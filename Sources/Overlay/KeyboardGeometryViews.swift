@@ -22,6 +22,20 @@ struct KeyboardGeometryMetrics: Equatable {
     var defyBottomThumbHeight: CGFloat { keySize * 0.78 }
     var defyCenterGap: CGFloat { keySize * 1.35 }
 
+    func macBookKeyWidths(
+        unitWidths: [Double],
+        targetWidth: CGFloat
+    ) -> [CGFloat] {
+        guard !unitWidths.isEmpty else { return [] }
+
+        let gapWidth = CGFloat(unitWidths.count - 1) * spacing
+        let availableKeyWidth = max(0, targetWidth - gapWidth)
+        let totalUnits = max(1, CGFloat(unitWidths.reduce(0, +)))
+        return unitWidths.map {
+            availableKeyWidth * CGFloat($0) / totalUnits
+        }
+    }
+
     func defyColumnOffsets(for side: KeyboardHalfSide) -> [CGFloat] {
         let left = [0.18, 0.12, 0.05, 0, 0.03, 0.10, 0.16].map {
             keySize * $0
@@ -42,6 +56,7 @@ struct MacBookGeometryView: View {
     let arrows: KeyboardPresentedArrowCluster
     let source: KeyboardPresentationSource
     let metrics: KeyboardGeometryMetrics
+    let contentWidth: CGFloat
 
     var body: some View {
         VStack(spacing: metrics.spacing) {
@@ -64,12 +79,16 @@ struct MacBookGeometryView: View {
         _ row: [KeyboardPresentedKey],
         height: CGFloat
     ) -> some View {
-        HStack(spacing: metrics.spacing) {
-            ForEach(row, id: \.viewID) { key in
+        let widths = metrics.macBookKeyWidths(
+            unitWidths: row.map(\.width),
+            targetWidth: contentWidth
+        )
+        return HStack(spacing: metrics.spacing) {
+            ForEach(Array(row.enumerated()), id: \.element.viewID) { index, key in
                 KeyCell(
                     key: key,
                     source: source,
-                    width: CGFloat(key.width) * metrics.keySize,
+                    width: widths[index],
                     height: height
                 )
             }
@@ -77,45 +96,50 @@ struct MacBookGeometryView: View {
     }
 
     private func bottomRow(_ row: [KeyboardPresentedKey]) -> some View {
-        HStack(alignment: .bottom, spacing: metrics.spacing) {
-            ForEach(row, id: \.viewID) { key in
+        let widths = metrics.macBookKeyWidths(
+            unitWidths: row.map(\.width) + [1, 1, 1],
+            targetWidth: contentWidth
+        )
+        let arrowWidth = widths.last ?? metrics.keySize
+        return HStack(alignment: .bottom, spacing: metrics.spacing) {
+            ForEach(Array(row.enumerated()), id: \.element.viewID) { index, key in
                 KeyCell(
                     key: key,
                     source: source,
-                    width: CGFloat(key.width) * metrics.keySize,
+                    width: widths[index],
                     height: metrics.keySize
                 )
             }
-            embeddedArrowCluster
+            embeddedArrowCluster(keyWidth: arrowWidth)
         }
     }
 
-    private var embeddedArrowCluster: some View {
+    private func embeddedArrowCluster(keyWidth: CGFloat) -> some View {
         HStack(alignment: .bottom, spacing: metrics.spacing) {
             KeyCell(
                 key: arrows.left,
                 source: source,
-                width: metrics.keySize,
+                width: keyWidth,
                 height: metrics.keySize
             )
             VStack(spacing: metrics.arrowVerticalSpacing) {
                 KeyCell(
                     key: arrows.up,
                     source: source,
-                    width: metrics.keySize,
+                    width: keyWidth,
                     height: metrics.arrowHalfHeight
                 )
                 KeyCell(
                     key: arrows.down,
                     source: source,
-                    width: metrics.keySize,
+                    width: keyWidth,
                     height: metrics.arrowHalfHeight
                 )
             }
             KeyCell(
                 key: arrows.right,
                 source: source,
-                width: metrics.keySize,
+                width: keyWidth,
                 height: metrics.keySize
             )
         }

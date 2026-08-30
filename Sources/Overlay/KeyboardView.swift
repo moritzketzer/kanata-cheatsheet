@@ -178,7 +178,8 @@ struct KeyboardView: View {
                 rows: rows,
                 arrows: arrows,
                 source: presentation.source,
-                metrics: metrics
+                metrics: metrics,
+                contentWidth: contentWidth
             )
         case .defy(let left, let right):
             DefyGeometryView(
