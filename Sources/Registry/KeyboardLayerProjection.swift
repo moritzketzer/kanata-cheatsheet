@@ -18,6 +18,21 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
     let holdModifier: String?
     let explanation: String?
     var keyLabel: String? = nil
+    var slotID: String? = nil
+
+    var viewID: String { slotID ?? id }
+
+    static func == (lhs: KeyboardPresentedKey, rhs: KeyboardPresentedKey) -> Bool {
+        lhs.id == rhs.id
+            && lhs.badge == rhs.badge
+            && lhs.actionLabel == rhs.actionLabel
+            && lhs.freeLabel == rhs.freeLabel
+            && lhs.colorHex == rhs.colorHex
+            && lhs.primary == rhs.primary
+            && lhs.holdModifier == rhs.holdModifier
+            && lhs.explanation == rhs.explanation
+            && lhs.keyLabel == rhs.keyLabel
+    }
 }
 
 
@@ -40,6 +55,26 @@ struct KeyboardPresentedDefyThumbs: Equatable {
 }
 
 
+struct KeyboardPresentedDefyThumbRows: Equatable {
+    let top: [KeyboardPresentedKey?]
+    let bottom: [KeyboardPresentedKey?]
+
+    var allKeys: [KeyboardPresentedKey] {
+        (top + bottom).compactMap { $0 }
+    }
+}
+
+
+struct KeyboardPresentedDefyHalf: Equatable {
+    let rows: [[KeyboardPresentedKey?]]
+    let thumbs: KeyboardPresentedDefyThumbRows
+
+    var allKeys: [KeyboardPresentedKey] {
+        rows.flatMap { $0 }.compactMap { $0 } + thumbs.allKeys
+    }
+}
+
+
 struct KeyboardPresentedArrowCluster: Equatable {
     let up: KeyboardPresentedKey
     let left: KeyboardPresentedKey
@@ -52,28 +87,120 @@ struct KeyboardPresentedArrowCluster: Equatable {
 }
 
 
+enum KeyboardPresentedGeometry: Equatable {
+    case macbook(
+        rows: [[KeyboardPresentedKey]],
+        arrows: KeyboardPresentedArrowCluster
+    )
+    case defy(
+        left: KeyboardPresentedDefyHalf,
+        right: KeyboardPresentedDefyHalf
+    )
+    case legacy(
+        rows: [[KeyboardPresentedKey]],
+        arrows: KeyboardPresentedArrowCluster?,
+        thumbs: KeyboardPresentedDefyThumbs?
+    )
+
+    var allKeys: [KeyboardPresentedKey] {
+        switch self {
+        case .macbook(let rows, let arrows):
+            return rows.flatMap { $0 } + arrows.allKeys
+        case .defy(let left, let right):
+            return left.allKeys + right.allKeys
+        case .legacy(let rows, let arrows, let thumbs):
+            return rows.flatMap { $0 }
+                + (arrows?.allKeys ?? [])
+                + (thumbs?.allKeys ?? [])
+        }
+    }
+}
+
+
 struct KeyboardLayerPresentation: Equatable {
     let name: String
     let label: String
     let trigger: String
     let source: KeyboardPresentationSource
-    let rows: [[KeyboardPresentedKey]]
+    let geometry: KeyboardPresentedGeometry
     let groups: [KeyboardPresentedGroup]
-    var defyThumbs: KeyboardPresentedDefyThumbs? = nil
-    var arrowCluster: KeyboardPresentedArrowCluster? = nil
     var footer: RegistryLayerFooter? = nil
 
+    init(
+        name: String,
+        label: String,
+        trigger: String,
+        source: KeyboardPresentationSource,
+        geometry: KeyboardPresentedGeometry,
+        groups: [KeyboardPresentedGroup],
+        footer: RegistryLayerFooter? = nil
+    ) {
+        self.name = name
+        self.label = label
+        self.trigger = trigger
+        self.source = source
+        self.geometry = geometry
+        self.groups = groups
+        self.footer = footer
+    }
+
+    init(
+        name: String,
+        label: String,
+        trigger: String,
+        source: KeyboardPresentationSource,
+        rows: [[KeyboardPresentedKey]],
+        groups: [KeyboardPresentedGroup],
+        defyThumbs: KeyboardPresentedDefyThumbs? = nil,
+        arrowCluster: KeyboardPresentedArrowCluster? = nil,
+        footer: RegistryLayerFooter? = nil
+    ) {
+        self.init(
+            name: name,
+            label: label,
+            trigger: trigger,
+            source: source,
+            geometry: .legacy(
+                rows: rows,
+                arrows: arrowCluster,
+                thumbs: defyThumbs
+            ),
+            groups: groups,
+            footer: footer
+        )
+    }
+
+    var rows: [[KeyboardPresentedKey]] {
+        switch geometry {
+        case .macbook(let rows, _), .legacy(let rows, _, _):
+            return rows
+        case .defy:
+            return []
+        }
+    }
+
+    var defyThumbs: KeyboardPresentedDefyThumbs? {
+        guard case .legacy(_, _, let thumbs) = geometry else { return nil }
+        return thumbs
+    }
+
+    var arrowCluster: KeyboardPresentedArrowCluster? {
+        switch geometry {
+        case .macbook(_, let arrows):
+            return arrows
+        case .legacy(_, let arrows, _):
+            return arrows
+        case .defy:
+            return nil
+        }
+    }
+
     var hasHoldModifiers: Bool {
-        let rowKeys = rows.flatMap { $0 }
-        let defyKeys = defyThumbs?.allKeys ?? []
-        let arrowKeys = arrowCluster?.allKeys ?? []
-        return (rowKeys + defyKeys + arrowKeys).contains { $0.holdModifier != nil }
+        geometry.allKeys.contains { $0.holdModifier != nil }
     }
 
     func key(at position: String) -> KeyboardPresentedKey? {
-        rows.lazy.flatMap { $0 }.first { $0.id == position }
-            ?? defyThumbs?.allKeys.first { $0.id == position }
-            ?? arrowCluster?.allKeys.first { $0.id == position }
+        geometry.allKeys.first { $0.id == position }
     }
 }
 
@@ -132,7 +259,8 @@ enum KeyboardLayerProjector {
         layerName: String,
         legacyLayer: Config.Layer?,
         registry: KeybindingRegistry?,
-        showFree: Bool
+        showFree: Bool,
+        geometryProfileId: String? = nil
     ) -> KeyboardLayerPresentation? {
         if let keyboardLayers = registry?.views.keyboardLayers,
            let geometry = keyboardLayers.geometry,
@@ -142,14 +270,19 @@ enum KeyboardLayerProjector {
             let groupColors = Dictionary(
                 uniqueKeysWithValues: layer.groups.map { ($0.id, $0.color) }
             )
-            let projectPosition = { (position: RegistryKeyboardPosition, isDefy: Bool) in
+            let projectPosition = {
+                (
+                    position: RegistryKeyboardPosition,
+                    useNamedBadge: Bool,
+                    slotID: String
+                ) -> KeyboardPresentedKey in
                 let cell = layer.cells[position.position]
                 let isPassthrough = cell?.group == "passthrough"
                 let freeMineKey = cell == nil && showFree && !showBaseKeys
                     ? position.mineKey
                     : nil
                 let canonicalBadge: String?
-                if isDefy {
+                if useNamedBadge {
                     canonicalBadge = position.namedKey
                 } else if showBaseKeys {
                     canonicalBadge = position.mineKey ?? position.namedKey
@@ -185,45 +318,179 @@ enum KeyboardLayerProjector {
                     primary: primary,
                     holdModifier: holdModifier,
                     explanation: explanation,
-                    keyLabel: nil
+                    keyLabel: nil,
+                    slotID: slotID
                 )
             }
-            let arrowPositionIDs = Set(
-                geometry.arrowCluster?.allPositions.map(\.position) ?? []
-            )
-            let rows = geometry.rows.map { row in
-                row
-                    .filter { !arrowPositionIDs.contains($0.position) }
-                    .map { projectPosition($0, false) }
+
+            let profiles = geometry.effectiveProfiles
+            let selectedProfile = geometryProfileId.flatMap { requestedID in
+                profiles.first { $0.id == requestedID }
+            } ?? geometry.defaultProfileId.flatMap { defaultID in
+                profiles.first { $0.id == defaultID }
+            } ?? profiles.first
+            guard let selectedProfile else { return nil }
+
+            func projectRows(
+                _ rows: [[RegistryKeyboardPosition?]],
+                prefix: String,
+                excluding positionIDs: Set<String> = []
+            ) -> [[KeyboardPresentedKey]] {
+                rows.enumerated().map { rowIndex, row in
+                    row.enumerated().compactMap { slotIndex, position in
+                        guard let position,
+                              !positionIDs.contains(position.position)
+                        else { return nil }
+                        return projectPosition(
+                            position,
+                            false,
+                            "\(prefix).row.\(rowIndex).slot.\(slotIndex)"
+                        )
+                    }
+                }
             }
-            let defyThumbs = geometry.defyThumbs.map { thumbs in
-                KeyboardPresentedDefyThumbs(
-                    label: thumbs.label,
-                    leftTop: thumbs.left.top.map { projectPosition($0, true) },
-                    leftBottom: thumbs.left.bottom.map { projectPosition($0, true) },
-                    rightTop: thumbs.right.top.map { projectPosition($0, true) },
-                    rightBottom: thumbs.right.bottom.map { projectPosition($0, true) }
-                )
-            }
-            let arrowCluster = geometry.arrowCluster.map { cluster in
+
+            func projectArrowCluster(
+                _ cluster: RegistryArrowCluster,
+                prefix: String
+            ) -> KeyboardPresentedArrowCluster {
                 KeyboardPresentedArrowCluster(
-                    up: projectPosition(cluster.up, false),
-                    left: projectPosition(cluster.left, false),
-                    down: projectPosition(cluster.down, false),
-                    right: projectPosition(cluster.right, false)
+                    up: projectPosition(cluster.up, false, "\(prefix).up"),
+                    left: projectPosition(cluster.left, false, "\(prefix).left"),
+                    down: projectPosition(cluster.down, false, "\(prefix).down"),
+                    right: projectPosition(cluster.right, false, "\(prefix).right")
                 )
+            }
+
+            func projectDefySlots(
+                _ positions: [RegistryKeyboardPosition?],
+                prefix: String
+            ) -> [KeyboardPresentedKey?] {
+                positions.enumerated().map { slotIndex, position in
+                    position.map {
+                        projectPosition(
+                            $0,
+                            false,
+                            "\(prefix).slot.\(slotIndex)"
+                        )
+                    }
+                }
+            }
+
+            func projectDefyHalf(
+                _ half: RegistryDefyHalf,
+                prefix: String
+            ) -> KeyboardPresentedDefyHalf {
+                KeyboardPresentedDefyHalf(
+                    rows: half.rows.enumerated().map { rowIndex, row in
+                        projectDefySlots(row, prefix: "\(prefix).row.\(rowIndex)")
+                    },
+                    thumbs: KeyboardPresentedDefyThumbRows(
+                        top: projectDefySlots(
+                            half.thumbs.top,
+                            prefix: "\(prefix).thumb.top"
+                        ),
+                        bottom: projectDefySlots(
+                            half.thumbs.bottom,
+                            prefix: "\(prefix).thumb.bottom"
+                        )
+                    )
+                )
+            }
+
+            let presentedGeometry: KeyboardPresentedGeometry
+            switch selectedProfile.kind {
+            case "macbook":
+                guard let profileRows = selectedProfile.rows,
+                      let arrows = selectedProfile.arrowCluster
+                else { return nil }
+                let arrowPositionIDs = Set(arrows.allPositions.map(\.position))
+                presentedGeometry = .macbook(
+                    rows: projectRows(
+                        profileRows,
+                        prefix: selectedProfile.id,
+                        excluding: arrowPositionIDs
+                    ),
+                    arrows: projectArrowCluster(
+                        arrows,
+                        prefix: "\(selectedProfile.id).arrows"
+                    )
+                )
+            case "defy":
+                guard let halves = selectedProfile.halves else { return nil }
+                presentedGeometry = .defy(
+                    left: projectDefyHalf(
+                        halves.left,
+                        prefix: "\(selectedProfile.id).left"
+                    ),
+                    right: projectDefyHalf(
+                        halves.right,
+                        prefix: "\(selectedProfile.id).right"
+                    )
+                )
+            case "legacy":
+                let profileRows = selectedProfile.rows
+                    ?? geometry.rows.map { row in row.map(Optional.some) }
+                let arrows = selectedProfile.arrowCluster ?? geometry.arrowCluster
+                let arrowPositionIDs = Set(
+                    arrows?.allPositions.map(\.position) ?? []
+                )
+                let legacyThumbs = geometry.defyThumbs.map { thumbs in
+                    KeyboardPresentedDefyThumbs(
+                        label: thumbs.label,
+                        leftTop: thumbs.left.top.enumerated().map { index, position in
+                            projectPosition(
+                                position,
+                                true,
+                                "legacy.thumb.left.top.\(index)"
+                            )
+                        },
+                        leftBottom: thumbs.left.bottom.enumerated().map { index, position in
+                            projectPosition(
+                                position,
+                                true,
+                                "legacy.thumb.left.bottom.\(index)"
+                            )
+                        },
+                        rightTop: thumbs.right.top.enumerated().map { index, position in
+                            projectPosition(
+                                position,
+                                true,
+                                "legacy.thumb.right.top.\(index)"
+                            )
+                        },
+                        rightBottom: thumbs.right.bottom.enumerated().map { index, position in
+                            projectPosition(
+                                position,
+                                true,
+                                "legacy.thumb.right.bottom.\(index)"
+                            )
+                        }
+                    )
+                }
+                presentedGeometry = .legacy(
+                    rows: projectRows(
+                        profileRows,
+                        prefix: "legacy",
+                        excluding: arrowPositionIDs
+                    ),
+                    arrows: arrows.map {
+                        projectArrowCluster($0, prefix: "legacy.arrows")
+                    },
+                    thumbs: legacyThumbs
+                )
+            default:
+                return nil
             }
             return KeyboardLayerPresentation(
                 name: layerName,
                 label: layer.label,
                 trigger: layer.trigger,
                 source: .registry,
-                rows: rows,
+                geometry: presentedGeometry,
                 groups: layer.groups.filter { $0.id != "passthrough" }.map {
                     KeyboardPresentedGroup(id: $0.id, colorHex: $0.color)
                 },
-                defyThumbs: defyThumbs,
-                arrowCluster: arrowCluster,
                 footer: layer.footer
             )
         }

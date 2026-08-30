@@ -51,7 +51,8 @@ private func namedKeyboardPosition(
 
 private func versionOneFixtureData(
     includeFooter: Bool = true,
-    includeIconlessCell: Bool = false
+    includeIconlessCell: Bool = false,
+    includeGeometryProfiles: Bool = false
 ) throws -> Data {
     let slots: [[String: Any]] = (1...15).map { index in
         [
@@ -91,6 +92,147 @@ private func versionOneFixtureData(
                 ],
             ],
         ]
+    }
+    let keyO: [String: Any] = [
+        "position": "KeyO",
+        "sourceKey": "o",
+        "mineKey": "G",
+        "width": 1.0,
+    ]
+    let keyboardRow: [[String: Any]] = [
+        [
+            "position": "KeyW",
+            "sourceKey": "w",
+            "mineKey": "L",
+            "width": 1.0,
+        ],
+        [
+            "position": "IntlBackslash",
+            "sourceKey": "<",
+            "namedKey": "Homerow Scroll",
+            "badge": "Scroll",
+            "width": 1.0,
+        ],
+        [
+            "position": "KeyZ",
+            "sourceKey": "y",
+            "mineKey": "V",
+            "width": 1.0,
+        ],
+        [
+            "position": "KeyD",
+            "sourceKey": "d",
+            "mineKey": "I",
+            "width": 1.0,
+        ],
+        [
+            "position": "KeyS",
+            "sourceKey": "s",
+            "mineKey": "R",
+            "width": 1.0,
+        ],
+        [
+            "position": "KeyL",
+            "sourceKey": "l",
+            "mineKey": "S",
+            "width": 1.0,
+        ],
+        [
+            "position": "KeyY",
+            "sourceKey": "z",
+            "mineKey": "W",
+            "width": 1.0,
+        ],
+        [
+            "position": "KeyH",
+            "sourceKey": "h",
+            "mineKey": "M",
+            "width": 1.0,
+        ],
+        keyO,
+        namedKeyboardPosition("F1", "f1", "F1"),
+        namedKeyboardPosition("ArrowUp", "up", "Up"),
+        namedKeyboardPosition("ArrowLeft", "left", "Left"),
+        namedKeyboardPosition("ArrowDown", "down", "Down"),
+        namedKeyboardPosition("ArrowRight", "rght", "Right"),
+    ]
+    let arrowCluster: [String: Any] = [
+        "up": namedKeyboardPosition("ArrowUp", "up", "Up"),
+        "left": namedKeyboardPosition("ArrowLeft", "left", "Left"),
+        "down": namedKeyboardPosition("ArrowDown", "down", "Down"),
+        "right": namedKeyboardPosition("ArrowRight", "rght", "Right"),
+    ]
+    let defyThumbs: [String: Any] = [
+        "label": "Defy thumbs",
+        "left": [
+            "top": [
+                namedKeyboardPosition("F13", "f13", "F13"),
+                namedKeyboardPosition("F14", "f14", "F14"),
+                namedKeyboardPosition("F15", "f15", "F15"),
+                namedKeyboardPosition("F16", "f16", "F16"),
+            ],
+            "bottom": [
+                namedKeyboardPosition("Numpad0", "kp0", "Keypad 0"),
+                namedKeyboardPosition("Numpad1", "kp1", "Keypad 1"),
+                namedKeyboardPosition("Numpad2", "kp2", "Keypad 2"),
+                namedKeyboardPosition("F17", "f17", "F17"),
+            ],
+        ],
+        "right": [
+            "top": [
+                namedKeyboardPosition("F19", "f19", "F19"),
+                namedKeyboardPosition("F20", "f20", "F20"),
+                namedKeyboardPosition("F21", "f21", "F21"),
+                namedKeyboardPosition("F22", "f22", "F22"),
+            ],
+            "bottom": [
+                namedKeyboardPosition("F18", "f18", "F18"),
+                namedKeyboardPosition("Numpad3", "kp3", "Keypad 3"),
+                namedKeyboardPosition("Numpad4", "kp4", "Keypad 4"),
+                namedKeyboardPosition("Numpad5", "kp5", "Keypad 5"),
+            ],
+        ],
+    ]
+    var geometry: [String: Any] = [
+        "layoutId": "mine-iso",
+        "rows": [keyboardRow],
+        "arrowCluster": arrowCluster,
+    ]
+    if includeGeometryProfiles {
+        var leftRows = [7, 7, 7, 6].map { count in
+            Array(repeating: keyO as Any, count: count)
+        }
+        leftRows[0][0] = NSNull()
+        let rightRows = [7, 7, 7, 6].map { count in
+            Array(repeating: keyO as Any, count: count)
+        }
+        geometry["defaultProfileId"] = "macbook"
+        geometry["profiles"] = [
+            [
+                "id": "macbook",
+                "label": "MacBook",
+                "kind": "macbook",
+                "rows": [keyboardRow],
+                "arrowCluster": arrowCluster,
+            ],
+            [
+                "id": "defy",
+                "label": "Dygma Defy",
+                "kind": "defy",
+                "halves": [
+                    "left": [
+                        "rows": leftRows,
+                        "thumbs": defyThumbs["left"]!,
+                    ],
+                    "right": [
+                        "rows": rightRows,
+                        "thumbs": defyThumbs["right"]!,
+                    ],
+                ],
+            ],
+        ]
+    } else {
+        geometry["defyThumbs"] = defyThumbs
     }
     let payload: [String: Any] = [
         "schemaVersion": 1,
@@ -181,104 +323,7 @@ private func versionOneFixtureData(
             "keyboard-layers": [
                 "id": "keyboard-layers",
                 "label": "Keyboard Layers",
-                "geometry": [
-                    "layoutId": "mine-iso",
-                    "rows": [
-                        [
-                            [
-                                "position": "KeyW",
-                                "sourceKey": "w",
-                                "mineKey": "L",
-                                "width": 1.0,
-                            ],
-                            [
-                                "position": "IntlBackslash",
-                                "sourceKey": "<",
-                                "namedKey": "Homerow Scroll",
-                                "badge": "Scroll",
-                                "width": 1.0,
-                            ],
-                            [
-                                "position": "KeyZ",
-                                "sourceKey": "y",
-                                "mineKey": "V",
-                                "width": 1.0,
-                            ],
-                            [
-                                "position": "KeyD",
-                                "sourceKey": "d",
-                                "mineKey": "I",
-                                "width": 1.0,
-                            ],
-                            [
-                                "position": "KeyS",
-                                "sourceKey": "s",
-                                "mineKey": "R",
-                                "width": 1.0,
-                            ],
-                            [
-                                "position": "KeyL",
-                                "sourceKey": "l",
-                                "mineKey": "S",
-                                "width": 1.0,
-                            ],
-                            [
-                                "position": "KeyY",
-                                "sourceKey": "z",
-                                "mineKey": "W",
-                                "width": 1.0,
-                            ],
-                            [
-                                "position": "KeyH",
-                                "sourceKey": "h",
-                                "mineKey": "M",
-                                "width": 1.0,
-                            ],
-                            namedKeyboardPosition("F1", "f1", "F1"),
-                            namedKeyboardPosition("ArrowUp", "up", "Up"),
-                            namedKeyboardPosition("ArrowLeft", "left", "Left"),
-                            namedKeyboardPosition("ArrowDown", "down", "Down"),
-                            namedKeyboardPosition("ArrowRight", "rght", "Right"),
-                        ],
-                    ],
-                    "arrowCluster": [
-                        "up": namedKeyboardPosition("ArrowUp", "up", "Up"),
-                        "left": namedKeyboardPosition("ArrowLeft", "left", "Left"),
-                        "down": namedKeyboardPosition("ArrowDown", "down", "Down"),
-                        "right": namedKeyboardPosition("ArrowRight", "rght", "Right"),
-                    ],
-                    "defyThumbs": [
-                        "label": "Defy thumbs",
-                        "left": [
-                            "top": [
-                                namedKeyboardPosition("F13", "f13", "F13"),
-                                namedKeyboardPosition("F14", "f14", "F14"),
-                                namedKeyboardPosition("F15", "f15", "F15"),
-                                namedKeyboardPosition("F16", "f16", "F16"),
-                            ],
-                            "bottom": [
-                                namedKeyboardPosition("Numpad0", "kp0", "Keypad 0"),
-                                namedKeyboardPosition("Numpad1", "kp1", "Keypad 1"),
-                                namedKeyboardPosition("Numpad2", "kp2", "Keypad 2"),
-                                namedKeyboardPosition("F17", "f17", "F17"),
-                            ],
-                        ],
-                        "right": [
-                            "top": [
-                                namedKeyboardPosition("F19", "f19", "F19"),
-                                namedKeyboardPosition("F20", "f20", "F20"),
-                                namedKeyboardPosition("F21", "f21", "F21"),
-                                namedKeyboardPosition("F22", "f22", "F22"),
-                            ],
-                            "bottom": [
-                                namedKeyboardPosition("F18", "f18", "F18"),
-                                namedKeyboardPosition("Numpad3", "kp3", "Keypad 3"),
-                                namedKeyboardPosition("Numpad4", "kp4", "Keypad 4"),
-                                namedKeyboardPosition("Numpad5", "kp5", "Keypad 5"),
-                            ],
-                        ],
-                    ],
-                ],
+                "geometry": geometry,
                 "layers": [
                     "mine": [
                         "id": "mine",
@@ -361,6 +406,10 @@ private func versionOneFixtureData(
                                     "token": "scroll",
                                 ],
                             ],
+                            "KeyO": registryCell(
+                                "geometry", "MacBook / Defy", "G", "o", "browse",
+                                "keyboard", iconKind: "sf-symbol"
+                            ),
                         ],
                     ],
                     "apps-alt": [
@@ -493,6 +542,77 @@ struct RegistryTests {
         )
         #expect(keyboardLayers.layers["apps"]?.overlayGroup == "apps")
         #expect(keyboardLayers.layers["apps-alt"]?.overlayGroup == "apps")
+    }
+
+    @Test("decodes ordered keyboard geometry profiles and nullable Defy slots")
+    func decodesKeyboardGeometryProfiles() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionOneFixtureData(includeGeometryProfiles: true)
+        )
+        let geometry = try #require(registry.views.keyboardLayers?.geometry)
+        let profiles = try #require(geometry.profiles)
+
+        #expect(geometry.defaultProfileId == "macbook")
+        #expect(profiles.map(\.id) == ["macbook", "defy"])
+        #expect(profiles.map(\.kind) == ["macbook", "defy"])
+        let defy = profiles[1]
+        #expect(defy.halves?.left.rows.map(\.count) == [7, 7, 7, 6])
+        #expect(defy.halves?.left.rows[0][0] == nil)
+        #expect(defy.halves?.left.rows[0][1]?.position == "KeyO")
+        #expect(defy.halves?.right.thumbs.top.count == 4)
+        #expect(defy.halves?.right.thumbs.bottom.count == 4)
+    }
+
+    @Test("synthesizes one legacy profile when declared profiles are absent")
+    func synthesizesLegacyKeyboardGeometryProfile() throws {
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let geometry = try #require(registry.views.keyboardLayers?.geometry)
+        let profile = try #require(geometry.effectiveProfiles.first)
+
+        #expect(geometry.effectiveProfiles.count == 1)
+        #expect(profile.id == "legacy")
+        #expect(profile.kind == "legacy")
+        #expect(profile.rows?[0][0]?.position == "KeyW")
+        #expect(profile.arrowCluster?.up.position == "ArrowUp")
+        #expect(profile.halves == nil)
+    }
+
+    @Test("projects identical Mine semantics through both geometries")
+    func projectsIdenticalSemanticsAcrossProfiles() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionOneFixtureData(includeGeometryProfiles: true)
+        )
+        let macbook = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                geometryProfileId: "macbook"
+            )
+        )
+        let defy = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                geometryProfileId: "defy"
+            )
+        )
+
+        #expect(macbook.key(at: "KeyO") == defy.key(at: "KeyO"))
+        guard case .macbook = macbook.geometry else {
+            Issue.record("Expected MacBook presentation")
+            return
+        }
+        guard case .defy(let left, let right) = defy.geometry else {
+            Issue.record("Expected Defy presentation")
+            return
+        }
+        #expect(left.rows[0][0] == nil)
+        #expect(left.rows[0][1]?.id == "KeyO")
+        #expect(right.rows.map(\.count) == [7, 7, 7, 6])
     }
 
     @Test("projects compact badges and one separate arrow cluster")

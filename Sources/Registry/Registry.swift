@@ -242,6 +242,51 @@ struct RegistryKeyboardGeometry: Codable, Hashable {
     let rows: [[RegistryKeyboardPosition]]
     var defyThumbs: RegistryDefyThumbs? = nil
     var arrowCluster: RegistryArrowCluster? = nil
+    var defaultProfileId: String? = nil
+    var profiles: [RegistryKeyboardGeometryProfile]? = nil
+
+    var effectiveProfiles: [RegistryKeyboardGeometryProfile] {
+        if let profiles {
+            return profiles
+        }
+        return [
+            RegistryKeyboardGeometryProfile(
+                id: "legacy",
+                label: "Keyboard",
+                kind: "legacy",
+                rows: rows.map { row in row.map(Optional.some) },
+                arrowCluster: arrowCluster
+            ),
+        ]
+    }
+}
+
+
+struct RegistryKeyboardGeometryProfile: Codable, Hashable, Identifiable {
+    let id: String
+    let label: String
+    let kind: String
+    var rows: [[RegistryKeyboardPosition?]]? = nil
+    var arrowCluster: RegistryArrowCluster? = nil
+    var halves: RegistryDefyHalves? = nil
+}
+
+
+struct RegistryDefyHalves: Codable, Hashable {
+    let left: RegistryDefyHalf
+    let right: RegistryDefyHalf
+}
+
+
+struct RegistryDefyHalf: Codable, Hashable {
+    let rows: [[RegistryKeyboardPosition?]]
+    let thumbs: RegistryDefyThumbRows
+}
+
+
+struct RegistryDefyThumbRows: Codable, Hashable {
+    let top: [RegistryKeyboardPosition?]
+    let bottom: [RegistryKeyboardPosition?]
 }
 
 
