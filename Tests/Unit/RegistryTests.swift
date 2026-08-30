@@ -199,13 +199,35 @@ private func versionOneFixtureData(
         "arrowCluster": arrowCluster,
     ]
     if includeGeometryProfiles {
-        var leftRows = [7, 7, 7, 6].map { count in
-            Array(repeating: keyO as Any, count: count)
+        let arrowPositionIDs = Set([
+            "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight",
+        ])
+        let defyMainPositions = [keyO] + keyboardRow.filter { position in
+            guard let positionID = position["position"] as? String else { return false }
+            return positionID != "KeyO" && !arrowPositionIDs.contains(positionID)
         }
-        leftRows[0][0] = NSNull()
-        let rightRows = [7, 7, 7, 6].map { count in
-            Array(repeating: keyO as Any, count: count)
+        let splitIndex = (defyMainPositions.count + 1) / 2
+        let makeDefyRows = {
+            (positions: [[String: Any]], startsWithEmptySlot: Bool) -> [[Any]] in
+            var remaining = positions
+            return [7, 7, 7, 6].enumerated().map { rowIndex, count in
+                (0..<count).map { slotIndex -> Any in
+                    if startsWithEmptySlot && rowIndex == 0 && slotIndex == 0 {
+                        return NSNull()
+                    }
+                    guard !remaining.isEmpty else { return NSNull() }
+                    return remaining.removeFirst()
+                }
+            }
         }
+        let leftRows = makeDefyRows(
+            Array(defyMainPositions.prefix(splitIndex)),
+            true
+        )
+        let rightRows = makeDefyRows(
+            Array(defyMainPositions.dropFirst(splitIndex)),
+            false
+        )
         geometry["defaultProfileId"] = "macbook"
         geometry["profiles"] = [
             [
@@ -557,6 +579,7 @@ struct RegistryTests {
         #expect(profiles.map(\.kind) == ["macbook", "defy"])
         let defy = profiles[1]
         #expect(defy.halves?.left.rows.map(\.count) == [7, 7, 7, 6])
+        #expect(defy.halves?.right.rows.map(\.count) == [7, 7, 7, 6])
         #expect(defy.halves?.left.rows[0][0] == nil)
         #expect(defy.halves?.left.rows[0][1]?.position == "KeyO")
         #expect(defy.halves?.right.thumbs.top.count == 4)
@@ -577,42 +600,63 @@ struct RegistryTests {
         #expect(profile.halves == nil)
     }
 
-    @Test("projects identical Mine semantics through both geometries")
+    @Test("projects every layer with identical semantics at shared positions")
     func projectsIdenticalSemanticsAcrossProfiles() throws {
         let registry = try KeybindingRegistry.parse(
             from: versionOneFixtureData(includeGeometryProfiles: true)
         )
-        let macbook = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                geometryProfileId: "macbook"
-            )
-        )
-        let defy = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                geometryProfileId: "defy"
-            )
-        )
+        let keyboardLayers = try #require(registry.views.keyboardLayers)
+        let expectedSharedPositionIDs = Set([
+            "KeyW", "IntlBackslash", "KeyZ", "KeyD", "KeyS",
+            "KeyL", "KeyY", "KeyH", "KeyO", "F1",
+        ])
 
-        #expect(macbook.key(at: "KeyO") == defy.key(at: "KeyO"))
-        guard case .macbook = macbook.geometry else {
-            Issue.record("Expected MacBook presentation")
-            return
+        for layerName in keyboardLayers.layers.keys.sorted() {
+            let macbook = try #require(
+                KeyboardLayerProjector.presentation(
+                    layerName: layerName,
+                    legacyLayer: nil,
+                    registry: registry,
+                    showFree: false,
+                    geometryProfileId: "macbook"
+                )
+            )
+            let defy = try #require(
+                KeyboardLayerProjector.presentation(
+                    layerName: layerName,
+                    legacyLayer: nil,
+                    registry: registry,
+                    showFree: false,
+                    geometryProfileId: "defy"
+                )
+            )
+            guard case .macbook = macbook.geometry else {
+                Issue.record("Expected MacBook presentation for \(layerName)")
+                return
+            }
+            guard case .defy = defy.geometry else {
+                Issue.record("Expected Defy presentation for \(layerName)")
+                return
+            }
+            let macbookKeys = Dictionary(
+                uniqueKeysWithValues: macbook.geometry.allKeys.map { ($0.id, $0) }
+            )
+            let defyKeys = Dictionary(
+                uniqueKeysWithValues: defy.geometry.allKeys.map { ($0.id, $0) }
+            )
+            let sharedPositionIDs = Set(macbookKeys.keys).intersection(defyKeys.keys)
+
+            #expect(
+                sharedPositionIDs == expectedSharedPositionIDs,
+                "Unexpected shared positions for layer \(layerName)"
+            )
+            for positionID in sharedPositionIDs.sorted() {
+                #expect(
+                    macbookKeys[positionID] == defyKeys[positionID],
+                    "Layer \(layerName) diverged at \(positionID)"
+                )
+            }
         }
-        guard case .defy(let left, let right) = defy.geometry else {
-            Issue.record("Expected Defy presentation")
-            return
-        }
-        #expect(left.rows[0][0] == nil)
-        #expect(left.rows[0][1]?.id == "KeyO")
-        #expect(right.rows.map(\.count) == [7, 7, 7, 6])
     }
 
     @Test("projects compact badges and one separate arrow cluster")
