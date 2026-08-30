@@ -1,0 +1,11 @@
+created: 2026-08-30
+status: draft
+history:
+  - date: 2026-08-30
+    event: created
+    session: 01a04859-33bf-76e3-85ef-39cad30fa0ce
+    tool: codex
+  - date: 2026-08-30
+    event: spec-written
+    session: 01a04859-33bf-76e3-85ef-39cad30fa0ce
+    tool: codex
