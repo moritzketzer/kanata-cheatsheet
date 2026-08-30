@@ -49,13 +49,15 @@ struct KeyboardView: View {
         legacyLayer: Config.Layer?,
         display: Config.Display,
         registry: KeybindingRegistry? = nil,
-        showFreeModifierSpace: Bool = false
+        showFreeModifierSpace: Bool = false,
+        geometryProfileId: String? = nil
     ) {
         let presentation = KeyboardLayerProjector.presentation(
             layerName: layerName,
             legacyLayer: legacyLayer,
             registry: registry,
-            showFree: showFreeModifierSpace
+            showFree: showFreeModifierSpace,
+            geometryProfileId: geometryProfileId
         ) ?? KeyboardLayerPresentation(
             name: layerName,
             label: layerName,

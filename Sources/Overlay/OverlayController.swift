@@ -10,6 +10,7 @@ enum OverlayAction: Equatable {
     case replace(String)
     case hide
     case refresh
+    case geometryChanged(id: String, refreshVisibleOverlay: Bool)
     case none
 }
 
@@ -17,6 +18,7 @@ final class OverlayLogic {
     private let config: Config
     private let registryLayerTriggers: [String: String]
     private let registryOverlayGroups: [String: String]
+    private var geometrySelection: KeyboardGeometrySelection
     private(set) var pendingLayer: String?
     private(set) var currentLayer: String?
     private(set) var visibleLayer: String?
@@ -24,10 +26,22 @@ final class OverlayLogic {
     private(set) var isPinned = false
     private(set) var showFreeModifierSpace = false
 
-    init(config: Config, registry: KeybindingRegistry? = nil) {
+    var selectedGeometryProfileId: String? {
+        geometrySelection.selectedProfileId
+    }
+
+    init(
+        config: Config,
+        registry: KeybindingRegistry? = nil,
+        storedGeometryProfileId: String? = nil
+    ) {
         self.config = config
         self.registryLayerTriggers = registry?.views.keyboardLayers?.layers.mapValues(\.trigger) ?? [:]
         self.registryOverlayGroups = registry?.views.keyboardLayers?.layers.compactMapValues(\.overlayGroup) ?? [:]
+        self.geometrySelection = KeyboardGeometrySelection(
+            geometry: registry?.views.keyboardLayers?.geometry,
+            storedProfileId: storedGeometryProfileId
+        )
     }
 
     private func trigger(for layer: String) -> String? {
@@ -141,6 +155,12 @@ final class OverlayLogic {
             return .show(layer)
         }
         switch message {
+        case "cheatsheet-geometry-toggle":
+            guard let id = geometrySelection.toggle() else { return .none }
+            return .geometryChanged(
+                id: id,
+                refreshVisibleOverlay: isVisible
+            )
         case "cheatsheet-space-toggle-free":
             guard isVisible, visibleLayer == "apps" else { return .none }
             showFreeModifierSpace.toggle()
@@ -187,15 +207,37 @@ final class OverlayController {
     private let config: Config
     private let registry: KeybindingRegistry?
     private let logic: OverlayLogic
+    private let defaults: UserDefaults
     private var panel: OverlayPanel?
     private var hostView: NSHostingView<KeyboardView>?
     private var delayTimer: Timer?
     private var currentLayer: String?
 
-    init(config: Config, registryResult: Result<KeybindingRegistry, Error>) {
+    init(
+        config: Config,
+        registryResult: Result<KeybindingRegistry, Error>,
+        defaults: UserDefaults = .standard
+    ) {
         self.config = config
         self.registry = try? registryResult.get()
-        self.logic = OverlayLogic(config: config, registry: self.registry)
+        self.defaults = defaults
+        let storedProfileId = defaults.string(
+            forKey: KeyboardGeometrySelection.defaultsKey
+        )
+        self.logic = OverlayLogic(
+            config: config,
+            registry: self.registry,
+            storedGeometryProfileId: storedProfileId
+        )
+        if self.registry?.views.keyboardLayers?.geometry?.profiles != nil,
+           let normalizedProfileId = logic.selectedGeometryProfileId,
+           normalizedProfileId != storedProfileId
+        {
+            defaults.set(
+                normalizedProfileId,
+                forKey: KeyboardGeometrySelection.defaultsKey
+            )
+        }
     }
 
     func handleLayerChange(_ layer: String) {
@@ -231,6 +273,11 @@ final class OverlayController {
             hideOverlay()
         case .refresh:
             refreshOverlay()
+        case .geometryChanged(let id, let refreshVisibleOverlay):
+            defaults.set(id, forKey: KeyboardGeometrySelection.defaultsKey)
+            if refreshVisibleOverlay {
+                refreshOverlay()
+            }
         case .none:
             break
         }
@@ -247,7 +294,8 @@ final class OverlayController {
             layerName: layerName,
             legacyLayer: config.layers[layerName],
             registry: registry,
-            showFree: logic.showFreeModifierSpace
+            showFree: logic.showFreeModifierSpace,
+            geometryProfileId: logic.selectedGeometryProfileId
         ) != nil else {
             return
         }
@@ -283,7 +331,8 @@ final class OverlayController {
             legacyLayer: config.layers[layerName],
             display: config.display,
             registry: registry,
-            showFreeModifierSpace: logic.showFreeModifierSpace
+            showFreeModifierSpace: logic.showFreeModifierSpace,
+            geometryProfileId: logic.selectedGeometryProfileId
         )
     }
 

@@ -355,6 +355,87 @@ struct OverlayControllerTests {
         #expect(!logic.showFreeModifierSpace)
     }
 
+    @Test("hidden geometry toggle changes only the selected profile")
+    func hiddenGeometryTogglePreservesOverlayState() {
+        let logic = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+
+        #expect(logic.selectedGeometryProfileId == "macbook")
+        #expect(
+            logic.handleMessage("cheatsheet-geometry-toggle")
+                == .geometryChanged(id: "defy", refreshVisibleOverlay: false)
+        )
+        #expect(logic.selectedGeometryProfileId == "defy")
+        #expect(!logic.isVisible)
+        #expect(!logic.isPinned)
+        #expect(logic.currentLayer == nil)
+        #expect(logic.visibleLayer == nil)
+        #expect(!logic.showFreeModifierSpace)
+    }
+
+    @Test("visible pinned geometry toggle preserves layer pin and free-slot state")
+    func visiblePinnedGeometryTogglePreservesState() {
+        let logic = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+        _ = logic.handleLayerChange("apps")
+        _ = logic.handleMessage("cheatsheet-show:apps")
+        _ = logic.handleMessage("cheatsheet-space-toggle-free")
+        _ = logic.handleMessage("cheatsheet-pin-toggle:apps")
+
+        #expect(
+            logic.handleMessage("cheatsheet-geometry-toggle")
+                == .geometryChanged(id: "defy", refreshVisibleOverlay: true)
+        )
+        #expect(logic.currentLayer == "apps")
+        #expect(logic.visibleLayer == "apps")
+        #expect(logic.isVisible)
+        #expect(logic.isPinned)
+        #expect(logic.showFreeModifierSpace)
+    }
+
+    @Test("controller persists default repairs and restart selection")
+    @MainActor
+    func controllerPersistsGeometrySelection() throws {
+        let suite = "KeyboardGeometrySelectionTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(
+            "removed-profile",
+            forKey: KeyboardGeometrySelection.defaultsKey
+        )
+
+        let first = OverlayController(
+            config: Config(layers: [:]),
+            registryResult: .success(geometryProfileRegistry()),
+            defaults: defaults
+        )
+        #expect(
+            defaults.string(forKey: KeyboardGeometrySelection.defaultsKey)
+                == "macbook"
+        )
+
+        first.handleMessage("cheatsheet-geometry-toggle")
+        #expect(
+            defaults.string(forKey: KeyboardGeometrySelection.defaultsKey)
+                == "defy"
+        )
+
+        let restored = OverlayController(
+            config: Config(layers: [:]),
+            registryResult: .success(geometryProfileRegistry()),
+            defaults: defaults
+        )
+        restored.handleMessage("cheatsheet-geometry-toggle")
+        #expect(
+            defaults.string(forKey: KeyboardGeometrySelection.defaultsKey)
+                == "macbook"
+        )
+    }
+
     @Test("toggling free modifier-space slots resizes the overlay both ways")
     @MainActor
     func togglingFreeSlotsResizesOverlayBothWays() throws {
@@ -681,6 +762,97 @@ struct OverlayControllerTests {
                         "fn": RegistryKeyboardLayer(
                             id: "fn",
                             label: "Media · Brightness · F-Keys",
+                            trigger: "manual",
+                            overlayGroup: nil,
+                            groups: [],
+                            cells: [:]
+                        ),
+                    ]
+                )
+            )
+        )
+    }
+
+    private func geometryProfileRegistry() -> KeybindingRegistry {
+        let position = RegistryKeyboardPosition(
+            position: "KeyO",
+            sourceKey: "o",
+            mineKey: "G",
+            namedKey: nil,
+            width: 1
+        )
+        let arrow = { (name: String, source: String) in
+            RegistryKeyboardPosition(
+                position: name,
+                sourceKey: source,
+                mineKey: nil,
+                namedKey: name,
+                width: 1
+            )
+        }
+        let arrows = RegistryArrowCluster(
+            up: arrow("ArrowUp", "up"),
+            left: arrow("ArrowLeft", "left"),
+            down: arrow("ArrowDown", "down"),
+            right: arrow("ArrowRight", "right")
+        )
+        let defyHalf = RegistryDefyHalf(
+            rows: [7, 7, 7, 6].map { count in
+                Array(repeating: Optional(position), count: count)
+            },
+            thumbs: RegistryDefyThumbRows(
+                top: Array(repeating: Optional(position), count: 4),
+                bottom: Array(repeating: Optional(position), count: 4)
+            )
+        )
+        let geometry = RegistryKeyboardGeometry(
+            layoutId: "mine-iso",
+            rows: [[position]],
+            arrowCluster: arrows,
+            defaultProfileId: "macbook",
+            profiles: [
+                RegistryKeyboardGeometryProfile(
+                    id: "macbook",
+                    label: "MacBook",
+                    kind: "macbook",
+                    rows: [[position]],
+                    arrowCluster: arrows
+                ),
+                RegistryKeyboardGeometryProfile(
+                    id: "defy",
+                    label: "Dygma Defy",
+                    kind: "defy",
+                    halves: RegistryDefyHalves(
+                        left: defyHalf,
+                        right: defyHalf
+                    )
+                ),
+            ]
+        )
+        return KeybindingRegistry(
+            schemaVersion: 1,
+            providers: [],
+            bindings: [],
+            diagnostics: [],
+            views: RegistryViews(
+                modifierSpace: ModifierSpaceView(
+                    id: "modifier-space",
+                    label: "Modifier + Space",
+                    slots: []
+                ),
+                allBindings: AllBindingsView(
+                    id: "all-bindings",
+                    label: "All Bindings",
+                    bindingIds: []
+                ),
+                keyboardLayers: KeyboardLayersView(
+                    id: "keyboard-layers",
+                    label: "Keyboard Layers",
+                    geometry: geometry,
+                    layers: [
+                        "apps": RegistryKeyboardLayer(
+                            id: "apps",
+                            label: "Apps",
                             trigger: "manual",
                             overlayGroup: nil,
                             groups: [],
