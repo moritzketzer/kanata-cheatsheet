@@ -18,15 +18,6 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
     let holdModifier: String?
     let explanation: String?
     var keyLabel: String? = nil
-
-    var icon: RegistryKeyIcon? {
-        guard let primary, primary.kind != "glyph" else { return nil }
-        return RegistryKeyIcon(kind: primary.kind, token: primary.token)
-    }
-
-    var displayActionLabel: String? {
-        explanation
-    }
 }
 
 
@@ -71,6 +62,13 @@ struct KeyboardLayerPresentation: Equatable {
     var defyThumbs: KeyboardPresentedDefyThumbs? = nil
     var arrowCluster: KeyboardPresentedArrowCluster? = nil
     var footer: RegistryLayerFooter? = nil
+
+    var hasHoldModifiers: Bool {
+        let rowKeys = rows.flatMap { $0 }
+        let defyKeys = defyThumbs?.allKeys ?? []
+        let arrowKeys = arrowCluster?.allKeys ?? []
+        return (rowKeys + defyKeys + arrowKeys).contains { $0.holdModifier != nil }
+    }
 
     func key(at position: String) -> KeyboardPresentedKey? {
         rows.lazy.flatMap { $0 }.first { $0.id == position }

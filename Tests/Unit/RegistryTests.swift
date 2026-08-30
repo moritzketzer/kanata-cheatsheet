@@ -314,8 +314,23 @@ private func versionOneFixtureData(
                         "id": "fn",
                         "label": "Media · Brightness · F-Keys",
                         "trigger": "manual",
-                        "groups": [],
-                        "cells": [:],
+                        "groups": [
+                            ["id": "functions", "color": "#f9e2af"],
+                        ],
+                        "cells": [
+                            "ArrowUp": [
+                                "bindingId": "test.arrow-hold",
+                                "displayKey": "Up",
+                                "sourceKey": "up",
+                                "actionLabel": "Up · Hold Control",
+                                "group": "functions",
+                                "presentation": [
+                                    "primary": ["kind": "sf-symbol", "token": "arrow.up"],
+                                    "holdModifier": "control",
+                                    "explanation": NSNull(),
+                                ],
+                            ],
+                        ],
                     ],
                     "yabai": yabaiLayer,
                     "apps": [
@@ -515,6 +530,49 @@ struct RegistryTests {
         #expect(mine.key(at: "ArrowRight") == cluster.right)
     }
 
+    @Test("maps visual roles and detects holds across keyboard regions")
+    func mapsVisualRolesAndDetectsHolds() throws {
+        #expect(KeyboardVisualSemantics.modifierGlyph("command") == "⌘")
+        #expect(KeyboardVisualSemantics.modifierGlyph("shift") == "⇧")
+        #expect(KeyboardVisualSemantics.modifierGlyph("option") == "⌥")
+        #expect(KeyboardVisualSemantics.modifierGlyph("control") == "⌃")
+        #expect(KeyboardVisualSemantics.modifierGlyph("unknown") == nil)
+        #expect(KeyboardVisualSemantics.glyphScale(";") == .single)
+        #expect(KeyboardVisualSemantics.glyphScale("F12") == .compact)
+
+        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let mine = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let function = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "fn",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let alternateApps = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "apps-alt",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+
+        #expect(mine.hasHoldModifiers)
+        #expect(function.rows.flatMap { $0 }.allSatisfy { $0.holdModifier == nil })
+        #expect(function.arrowCluster?.up.holdModifier == "control")
+        #expect(function.hasHoldModifiers)
+        #expect(!alternateApps.hasHoldModifiers)
+    }
+
     @Test("projects an iconless mapped cell with its label and color")
     func projectsIconlessMappedCell() throws {
         let registry = try KeybindingRegistry.parse(
@@ -532,7 +590,7 @@ struct RegistryTests {
 
         #expect(finder.actionLabel == "Finder")
         #expect(finder.colorHex == "#a6e3a1")
-        #expect(finder.icon == nil)
+        #expect(finder.primary == nil)
     }
 
     @Test("decodes and projects optional layer footer")
@@ -602,13 +660,13 @@ struct RegistryTests {
         #expect(empty.badge == "V")
         #expect(empty.keyLabel == nil)
         #expect(empty.actionLabel == nil)
-        #expect(empty.icon == nil)
+        #expect(empty.primary == nil)
 
         let mapped = try #require(mine.key(at: "KeyW"))
         #expect(mapped.badge == "L")
         #expect(mapped.keyLabel == nil)
         #expect(mapped.actionLabel == "Symbols")
-        #expect(mapped.icon == RegistryKeyIcon(kind: "app-font", token: ":finder:"))
+        #expect(mapped.primary == RegistryKeyVisual(kind: "app-font", token: ":finder:"))
     }
 
     @Test("projects passthrough keys quietly and omits their legend group")
@@ -627,7 +685,7 @@ struct RegistryTests {
         #expect(f1.badge == "F1")
         #expect(f1.keyLabel == nil)
         #expect(f1.actionLabel == nil)
-        #expect(f1.icon == nil)
+        #expect(f1.primary == nil)
         #expect(f1.colorHex == nil)
         #expect(yabai.groups.map(\.id) == ["windows"])
     }
@@ -743,7 +801,10 @@ struct RegistryTests {
         #expect(occupiedL.badge == "L")
         #expect(occupiedL.keyLabel == nil)
         #expect(occupiedL.actionLabel == "Finder")
-        #expect(occupiedL.icon == RegistryKeyIcon(kind: "app-font", token: ":finder:"))
+        #expect(
+            occupiedL.primary
+                == RegistryKeyVisual(kind: "app-font", token: ":finder:")
+        )
         #expect(occupiedV.badge == nil)
         #expect(occupiedV.freeLabel == nil)
         #expect(freeV.badge == "V")

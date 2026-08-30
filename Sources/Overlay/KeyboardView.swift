@@ -102,6 +102,14 @@ struct KeyboardView: View {
                         }
                     }
                 }
+
+                if let cluster = presentation.arrowCluster {
+                    HStack {
+                        Spacer(minLength: 0)
+                        arrowBlock(cluster)
+                    }
+                    .frame(width: contentWidth)
+                }
             }
 
             if let thumbs = presentation.defyThumbs {
@@ -125,6 +133,13 @@ struct KeyboardView: View {
                         )
                     }
                 }
+            }
+
+            if presentation.hasHoldModifiers {
+                Text("KEY ↖   TAP ●   HOLD ↘")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color(hex: "#6c7086"))
+                    .tracking(1.2)
             }
 
             if !presentation.groups.isEmpty {
@@ -200,6 +215,34 @@ struct KeyboardView: View {
             }
         }
     }
+
+    private func arrowBlock(_ cluster: KeyboardPresentedArrowCluster) -> some View {
+        Grid(
+            horizontalSpacing: Self.keySpacing,
+            verticalSpacing: Self.keySpacing
+        ) {
+            GridRow {
+                Color.clear.frame(width: keySize, height: keySize)
+                KeyCell(
+                    key: cluster.up,
+                    source: presentation.source,
+                    width: keySize,
+                    height: keySize
+                )
+                Color.clear.frame(width: keySize, height: keySize)
+            }
+            GridRow {
+                ForEach([cluster.left, cluster.down, cluster.right]) { key in
+                    KeyCell(
+                        key: key,
+                        source: presentation.source,
+                        width: keySize,
+                        height: keySize
+                    )
+                }
+            }
+        }
+    }
 }
 
 
@@ -211,7 +254,10 @@ struct KeyCell: View {
     let height: CGFloat
 
     private var isOccupied: Bool {
-        key.actionLabel != nil || key.keyLabel != nil
+        if source == .registry {
+            return key.primary != nil || key.keyLabel != nil
+        }
+        return key.actionLabel != nil || key.keyLabel != nil
     }
 
     private var color: Color {
@@ -228,7 +274,9 @@ struct KeyCell: View {
                         design: .monospaced
                     ))
                     .foregroundStyle(
-                        isOccupied ? color : Color(hex: "#6c7086")
+                        isOccupied
+                            ? Color(hex: "#a6adc8")
+                            : Color(hex: "#585b70")
                     )
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
@@ -262,40 +310,80 @@ struct KeyCell: View {
     }
 
     private var registryContent: some View {
-        VStack(spacing: 3) {
-            Spacer(minLength: 4)
-            if let keyLabel = key.keyLabel {
-                Text(keyLabel)
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 3) {
+                Spacer(minLength: 5)
+                primaryContent
+                if let explanation = key.explanation {
+                    Text(explanation)
+                        .font(.system(size: height * 0.12, weight: .medium))
+                        .foregroundStyle(Color(hex: "#bac2de"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                } else if let freeLabel = key.freeLabel {
+                    Text(freeLabel)
+                        .font(.system(size: height * 0.13, design: .monospaced))
+                        .foregroundStyle(Color(hex: "#585b70"))
+                }
+                Spacer(minLength: 5)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 4)
+
+            if let modifier = key.holdModifier,
+               let glyph = KeyboardVisualSemantics.modifierGlyph(modifier)
+            {
+                Text(glyph)
+                    .font(.system(size: height * 0.15, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#cdd6f4"))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(hex: "#1e1e2e").opacity(0.9))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color(hex: "#7f849c"), lineWidth: 1)
+                    )
+                    .padding(5)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var primaryContent: some View {
+        if let keyLabel = key.keyLabel {
+            Text(keyLabel)
+                .font(.system(
+                    size: height * 0.28,
+                    weight: .semibold,
+                    design: .monospaced
+                ))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+        } else if let primary = key.primary {
+            if primary.kind == "glyph" {
+                let scale = KeyboardVisualSemantics.glyphScale(primary.token)
+                Text(primary.token)
                     .font(.system(
-                        size: height * 0.28,
+                        size: height * (scale == .single ? 0.38 : 0.28),
                         weight: .semibold,
                         design: .monospaced
                     ))
                     .foregroundStyle(color)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-            } else if let icon = key.icon {
-                RegistryIcon(icon: icon, size: height * 0.34)
-                    .foregroundStyle(color)
+                    .minimumScaleFactor(0.5)
+            } else {
+                RegistryIcon(
+                    icon: RegistryKeyIcon(kind: primary.kind, token: primary.token),
+                    size: height * 0.34
+                )
+                .foregroundStyle(color)
             }
-            if let actionLabel = key.displayActionLabel {
-                Text(actionLabel)
-                    .font(.system(
-                        size: height * (key.keyLabel == nil ? 0.14 : 0.12),
-                        weight: .medium
-                    ))
-                    .foregroundStyle(Color(hex: "#bac2de"))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-            } else if let freeLabel = key.freeLabel {
-                Text(freeLabel)
-                    .font(.system(size: height * 0.13, design: .monospaced))
-                    .foregroundStyle(Color(hex: "#585b70"))
-            }
-            Spacer(minLength: 4)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 3)
     }
 
     private var legacyContent: some View {
