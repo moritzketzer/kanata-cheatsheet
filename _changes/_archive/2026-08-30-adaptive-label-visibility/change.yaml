@@ -1,5 +1,5 @@
 created: 2026-08-30
-status: draft
+status: archived
 history:
   - date: 2026-08-30
     event: created
@@ -35,3 +35,11 @@ history:
     tool: codex
     publication: intermediate
     reason: the immutable app commit must be visible to fetchFromGitHub before the Nix pin can build
+  - date: 2026-08-30
+    event: completed
+    session: 01a04859-33bf-76e3-85ef-39cad30fa0ce
+    tool: codex
+  - date: 2026-08-30
+    event: archived
+    session: 01a04859-33bf-76e3-85ef-39cad30fa0ce
+    tool: codex

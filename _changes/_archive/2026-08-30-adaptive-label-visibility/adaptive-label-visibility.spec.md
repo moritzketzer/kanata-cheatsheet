@@ -100,3 +100,41 @@ Approval authorizes implementation in the app worktree, tests and visual
 verification, the corresponding Nix pin update in an isolated nix-config
 worktree, independent review, commits, publication to both `main` branches,
 MacBook deployment, live LaunchAgent verification, and archiving this change.
+
+## As Built
+
+The app implementation landed in `23a9946abe6f34cafcc47a96a9b077ab3de5c7d4`.
+It added the pure `KeyboardPresentedKey.displayActionLabel` rule in
+`Sources/Registry/KeyboardLayerProjection.swift`, switched only registry-backed
+label rendering in `Sources/Overlay/KeyboardView.swift`, and added regression
+coverage in `Tests/Unit/RegistryTests.swift`. The final rule uses an explicit
+ASCII allowlist for `0.square` through `9.square`; a review-found fullwidth
+numeric counterexample remains visible by default.
+
+The initial RED run failed to compile because `displayActionLabel` did not yet
+exist. The review-fix RED run failed one assertion because `４.square` was
+incorrectly suppressed. After both production changes, `make test` passed 74
+tests in 8 suites, `make all` built the optimized binary, and `git diff --check`
+was clean. Independent app review closed its one Important allowlist finding
+and approved exact head `23a9946` with no remaining findings.
+
+The Nix pin landed in
+`9b53a5cb778e52bab8501f7f375a6ce5e5c09858`, changing only
+`overlays/kanata-cheatsheet.nix`. The measured source hash is
+`sha256-Tu1DQhb7NKF88Aa2jLHP34doQfwLp3QuqDcyC5N/vew=`. The focused Macserver
+Crabbox build produced
+`/nix/store/6ck452rfzs0wpcybdx04fdacskihzhvg-kanata-cheatsheet-0.2.1`, and an
+independent Nix review repeated the build and approved the exact pin without
+findings. `nixfmt --check`, the commit-hook formatter, and diff hygiene passed.
+
+Before/after captures kept Apps, Mine, and Yabai byte-identical. Nav removed
+only the duplicate lower labels for `0`, `4`, `5`, `6`, `7`, `8`, `9`, `+`,
+both minus cells, `€`, and `$`; modifier explanations and iconless punctuation
+remained visible. After `just switch`, `/run/current-system/darwin-version.json`
+reported configuration revision `9b53a5cb`, LaunchAgent PID 77333 ran the exact
+new store binary, and all four live captures matched the reviewed candidate
+byte-for-byte while `cmux` remained frontmost.
+
+The only actionable unresolved output was the repository's existing Nix
+evaluation deprecation warnings for `stdenv.isLinux` and `stdenv.isDarwin`;
+this change did not touch those call sites.
