@@ -8,6 +8,8 @@ APP_SOURCES := $(filter-out Tests/%,$(SOURCES))
 # Test sources: all app sources except main.swift, plus test files
 APP_LIB := $(filter-out Sources/App/main.swift,$(APP_SOURCES))
 TESTS := $(wildcard Tests/Unit/*.swift)
+VISUAL_RENDERER := .build/render-contact-sheets
+VISUAL_SOURCE := Tests/Visual/main.swift
 
 # Swift Testing framework paths
 PLATFORM := /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer
@@ -19,7 +21,7 @@ TESTFLAGS := -parse-as-library \
 
 PREFIX ?= /usr/local
 
-.PHONY: all clean install test
+.PHONY: all clean install test render-contact-sheets
 
 all: .build/kanata-cheatsheet
 
@@ -34,6 +36,14 @@ all: .build/kanata-cheatsheet
 
 test: .build/tests
 	.build/tests
+
+$(VISUAL_RENDERER): $(APP_LIB) $(VISUAL_SOURCE) | .build
+	$(SWIFTC) -parse-as-library $(SWIFTFLAGS) -o $@ $(APP_LIB) $(VISUAL_SOURCE) $(FRAMEWORKS)
+
+render-contact-sheets: $(VISUAL_RENDERER)
+	@test -n "$(REGISTRY)" || (echo "REGISTRY is required" >&2; exit 2)
+	@test -n "$(OUTPUT)" || (echo "OUTPUT is required" >&2; exit 2)
+	$(VISUAL_RENDERER) --registry "$(REGISTRY)" --output "$(OUTPUT)"
 
 clean:
 	rm -rf .build
