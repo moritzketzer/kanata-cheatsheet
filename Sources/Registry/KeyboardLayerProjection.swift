@@ -16,6 +16,43 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
     let colorHex: String?
     let icon: RegistryKeyIcon?
     var keyLabel: String? = nil
+
+    var displayActionLabel: String? {
+        guard let actionLabel,
+              let icon,
+              icon.kind == "sf-symbol",
+              let literalGlyph = Self.literalGlyph(for: icon.token),
+              Self.label(actionLabel, matches: literalGlyph)
+        else {
+            return actionLabel
+        }
+        return nil
+    }
+
+    private static func literalGlyph(for token: String) -> String? {
+        let squareSuffix = ".square"
+        if token.hasSuffix(squareSuffix) {
+            let stem = String(token.dropLast(squareSuffix.count))
+            if stem.count == 1, stem.first?.isNumber == true {
+                return stem
+            }
+        }
+
+        switch token {
+        case "plus.square": return "+"
+        case "minus.square": return "−"
+        case "eurosign.square": return "€"
+        case "dollarsign.square": return "$"
+        default: return nil
+        }
+    }
+
+    private static func label(_ label: String, matches literalGlyph: String) -> Bool {
+        if literalGlyph == "−" {
+            return label == "−" || label == "-"
+        }
+        return label == literalGlyph
+    }
 }
 
 

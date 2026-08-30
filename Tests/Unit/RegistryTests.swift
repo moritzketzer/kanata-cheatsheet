@@ -36,6 +36,25 @@ private func namedKeyboardPosition(
 }
 
 
+private func presentedKey(
+    _ actionLabel: String?,
+    iconKind: String? = "sf-symbol",
+    iconToken: String? = nil
+) -> KeyboardPresentedKey {
+    KeyboardPresentedKey(
+        id: "KeyW",
+        width: 1.0,
+        badge: "L",
+        actionLabel: actionLabel,
+        freeLabel: nil,
+        colorHex: "#f9e2af",
+        icon: iconKind.flatMap { kind in
+            iconToken.map { RegistryKeyIcon(kind: kind, token: $0) }
+        }
+    )
+}
+
+
 private func versionOneFixtureData(
     includeFooter: Bool = true,
     includeIconlessCell: Bool = false
@@ -349,6 +368,35 @@ private func versionOneFixtureData(
 
 @Suite("Keybinding Registry")
 struct RegistryTests {
+    @Test("hides exact literal SF Symbol labels without dropping semantic data")
+    func hidesExactLiteralLabels() {
+        let digit = presentedKey("4", iconToken: "4.square")
+
+        #expect(digit.actionLabel == "4")
+        #expect(digit.displayActionLabel == nil)
+        #expect(presentedKey("$", iconToken: "dollarsign.square").displayActionLabel == nil)
+        #expect(presentedKey("−", iconToken: "minus.square").displayActionLabel == nil)
+        #expect(presentedKey("-", iconToken: "minus.square").displayActionLabel == nil)
+    }
+
+    @Test("keeps labels that add meaning or lack a known literal icon")
+    func keepsInformativeLabels() {
+        #expect(
+            presentedKey("1 · Hold Command", iconToken: "1.square").displayActionLabel
+                == "1 · Hold Command"
+        )
+        #expect(presentedKey(";", iconKind: nil).displayActionLabel == ";")
+        #expect(presentedKey("Copy", iconToken: "doc.on.doc").displayActionLabel == "Copy")
+        #expect(
+            presentedKey("Finder", iconKind: "app-font", iconToken: ":finder:")
+                .displayActionLabel == "Finder"
+        )
+        #expect(
+            presentedKey("Future", iconToken: "future.literal.symbol").displayActionLabel
+                == "Future"
+        )
+    }
+
     @Test("decodes registry version one")
     func decodesRegistry() throws {
         let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())

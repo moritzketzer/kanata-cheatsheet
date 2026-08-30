@@ -278,7 +278,7 @@ struct KeyCell: View {
                 RegistryIcon(icon: icon, size: height * 0.34)
                     .foregroundStyle(color)
             }
-            if let actionLabel = key.actionLabel {
+            if let actionLabel = key.displayActionLabel {
                 Text(actionLabel)
                     .font(.system(
                         size: height * (key.keyLabel == nil ? 0.14 : 0.12),
