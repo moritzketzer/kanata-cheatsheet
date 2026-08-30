@@ -68,19 +68,44 @@ struct KeyboardView: View {
         )
         let screenWidth = NSScreen.main?.frame.width ?? 1440
         let targetWidth = screenWidth * CGFloat(display.width_percent) / 100
-        let maxRowUnits = presentation.rows.map { row in
-            row.map(\.width).reduce(0, +)
-        }.max() ?? 14
-        let maxKeyCount = presentation.rows.map(\.count).max() ?? 1
         let horizontalPadding: CGFloat = 64
-        let gaps = CGFloat(max(0, maxKeyCount - 1)) * Self.keySpacing
+        let contentWidth = targetWidth - horizontalPadding
+        let calculatedKeySize: CGFloat
+        switch presentation.geometry {
+        case .macbook(let rows, _):
+            let rowUnits = rows.map { row in
+                CGFloat(row.map(\.width).reduce(0, +))
+            }
+            let ordinaryMaxUnits = rowUnits.max() ?? 1
+            let bottomUnits = (rowUnits.last ?? 0) + 3
+            let maxUnits = max(ordinaryMaxUnits, bottomUnits)
+            let ordinaryMaxCount = rows.map(\.count).max() ?? 1
+            let bottomCount = (rows.last?.count ?? 0) + 3
+            let gapCount = max(ordinaryMaxCount, bottomCount) - 1
+            calculatedKeySize = (
+                contentWidth - CGFloat(max(0, gapCount)) * Self.keySpacing
+            ) / max(1, maxUnits)
+        case .defy:
+            let keyUnits: CGFloat = 14 + 1.35
+            let withinHalfGaps: CGFloat = 12
+            calculatedKeySize = (
+                contentWidth - withinHalfGaps * Self.keySpacing
+            ) / keyUnits
+        case .legacy(let rows, _, _):
+            let maxRowUnits = rows.map { row in
+                CGFloat(row.map(\.width).reduce(0, +))
+            }.max() ?? 14
+            let maxKeyCount = rows.map(\.count).max() ?? 1
+            let gaps = CGFloat(max(0, maxKeyCount - 1)) * Self.keySpacing
+            calculatedKeySize = (contentWidth - gaps) / max(1, maxRowUnits)
+        }
 
         self.presentation = presentation
         self.config = display
         self.registry = registry
         self.showFreeModifierSpace = showFreeModifierSpace
-        self.keySize = max(28, (targetWidth - horizontalPadding - gaps) / maxRowUnits)
-        self.contentWidth = targetWidth - horizontalPadding
+        self.keySize = max(28, calculatedKeySize)
+        self.contentWidth = contentWidth
     }
 
     var body: some View {
@@ -91,51 +116,7 @@ struct KeyboardView: View {
                 .tracking(4)
                 .textCase(.uppercase)
 
-            VStack(spacing: Self.keySpacing) {
-                ForEach(Array(presentation.rows.enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: Self.keySpacing) {
-                        ForEach(row) { key in
-                            KeyCell(
-                                key: key,
-                                source: presentation.source,
-                                width: CGFloat(key.width) * keySize,
-                                height: keySize
-                            )
-                        }
-                    }
-                }
-
-                if let cluster = presentation.arrowCluster {
-                    HStack {
-                        Spacer(minLength: 0)
-                        arrowBlock(cluster)
-                    }
-                    .frame(width: contentWidth)
-                }
-            }
-
-            if let thumbs = presentation.defyThumbs {
-                VStack(spacing: 6) {
-                    Text(thumbs.label)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#6c7086"))
-                        .tracking(2)
-                        .textCase(.uppercase)
-
-                    HStack(alignment: .bottom, spacing: keySize * 1.25) {
-                        defyHalf(
-                            top: thumbs.leftTop,
-                            bottom: thumbs.leftBottom,
-                            topOffset: keySize * 0.18
-                        )
-                        defyHalf(
-                            top: thumbs.rightTop,
-                            bottom: thumbs.rightBottom,
-                            topOffset: -keySize * 0.18
-                        )
-                    }
-                }
-            }
+            geometryContent
 
             if presentation.hasHoldModifiers {
                 Text("KEY ↖   TAP ●   HOLD ↘")
@@ -185,64 +166,36 @@ struct KeyboardView: View {
         .fixedSize()
     }
 
-    private func defyHalf(
-        top: [KeyboardPresentedKey],
-        bottom: [KeyboardPresentedKey],
-        topOffset: CGFloat
-    ) -> some View {
-        let thumbWidth = keySize * 0.88
-        let thumbHeight = keySize * 0.72
-        return VStack(spacing: Self.keySpacing) {
-            HStack(spacing: Self.keySpacing) {
-                ForEach(top) { key in
-                    KeyCell(
-                        key: key,
-                        source: presentation.source,
-                        width: CGFloat(key.width) * thumbWidth,
-                        height: thumbHeight
-                    )
-                }
-            }
-            .offset(x: topOffset)
-
-            HStack(spacing: Self.keySpacing) {
-                ForEach(bottom) { key in
-                    KeyCell(
-                        key: key,
-                        source: presentation.source,
-                        width: CGFloat(key.width) * thumbWidth,
-                        height: thumbHeight
-                    )
-                }
-            }
-        }
-    }
-
-    private func arrowBlock(_ cluster: KeyboardPresentedArrowCluster) -> some View {
-        Grid(
-            horizontalSpacing: Self.keySpacing,
-            verticalSpacing: Self.keySpacing
-        ) {
-            GridRow {
-                Color.clear.frame(width: keySize, height: keySize)
-                KeyCell(
-                    key: cluster.up,
-                    source: presentation.source,
-                    width: keySize,
-                    height: keySize
-                )
-                Color.clear.frame(width: keySize, height: keySize)
-            }
-            GridRow {
-                ForEach([cluster.left, cluster.down, cluster.right]) { key in
-                    KeyCell(
-                        key: key,
-                        source: presentation.source,
-                        width: keySize,
-                        height: keySize
-                    )
-                }
-            }
+    @ViewBuilder
+    private var geometryContent: some View {
+        let metrics = KeyboardGeometryMetrics(
+            keySize: keySize,
+            spacing: Self.keySpacing
+        )
+        switch presentation.geometry {
+        case .macbook(let rows, let arrows):
+            MacBookGeometryView(
+                rows: rows,
+                arrows: arrows,
+                source: presentation.source,
+                metrics: metrics
+            )
+        case .defy(let left, let right):
+            DefyGeometryView(
+                left: left,
+                right: right,
+                source: presentation.source,
+                metrics: metrics
+            )
+        case .legacy(let rows, let arrows, let thumbs):
+            LegacyKeyboardGeometryView(
+                rows: rows,
+                arrows: arrows,
+                thumbs: thumbs,
+                source: presentation.source,
+                metrics: metrics,
+                contentWidth: contentWidth
+            )
         }
     }
 }

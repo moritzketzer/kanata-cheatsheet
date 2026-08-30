@@ -436,6 +436,43 @@ struct OverlayControllerTests {
         )
     }
 
+    @Test("visible geometry toggle refits the same panel")
+    @MainActor
+    func visibleGeometryToggleRefitsSamePanel() throws {
+        let suite = "KeyboardGeometryLayoutTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(geometryProfileRegistry()),
+            defaults: defaults
+        )
+
+        controller.handleMessage("cheatsheet-show:apps")
+        let macbookPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let macbookFrame = macbookPanel.frame
+
+        controller.handleMessage("cheatsheet-geometry-toggle")
+        let defyPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+
+        #expect(defyPanel === macbookPanel)
+        #expect(defyPanel.frame.height > macbookFrame.height)
+        #expect(try #require(defyPanel.contentView).fittingSize.width <= defyPanel.frame.width)
+        #expect(defyPanel.styleMask.contains(.nonactivatingPanel))
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
     @Test("toggling free modifier-space slots resizes the overlay both ways")
     @MainActor
     func togglingFreeSlotsResizesOverlayBothWays() throws {
