@@ -32,4 +32,12 @@ struct KeyboardGeometrySelection: Equatable {
         self.selectedProfileId = next
         return next
     }
+
+    mutating func select(_ profileId: String) -> String? {
+        guard profileIds.contains(profileId), profileId != selectedProfileId else {
+            return nil
+        }
+        selectedProfileId = profileId
+        return profileId
+    }
 }

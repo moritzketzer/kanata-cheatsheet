@@ -39,6 +39,21 @@ struct KeyboardGeometrySelectionTests {
         #expect(selection.toggle() == "macbook")
     }
 
+    @Test("selects an exact profile idempotently and rejects unknown profiles")
+    func selectsExactProfile() {
+        var selection = KeyboardGeometrySelection(
+            geometry: geometryForSelection(),
+            storedProfileId: nil
+        )
+
+        #expect(selection.select("defy") == "defy")
+        #expect(selection.selectedProfileId == "defy")
+        #expect(selection.select("defy") == nil)
+        #expect(selection.select("missing") == nil)
+        #expect(selection.selectedProfileId == "defy")
+        #expect(selection.select("macbook") == "macbook")
+    }
+
     @Test("restores a valid profile and repairs an invalid profile")
     func restoresAndRepairsStoredProfile() {
         let restored = KeyboardGeometrySelection(
