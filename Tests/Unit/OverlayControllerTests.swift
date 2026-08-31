@@ -365,7 +365,11 @@ struct OverlayControllerTests {
         #expect(logic.selectedGeometryProfileId == "macbook")
         #expect(
             logic.handleMessage("cheatsheet-geometry-toggle")
-                == .geometryChanged(id: "defy", refreshVisibleOverlay: false)
+                == .geometryChanged(
+                    id: "defy",
+                    refreshVisibleOverlay: false,
+                    persistSelection: true
+                )
         )
         #expect(logic.selectedGeometryProfileId == "defy")
         #expect(!logic.isVisible)
@@ -388,13 +392,130 @@ struct OverlayControllerTests {
 
         #expect(
             logic.handleMessage("cheatsheet-geometry-toggle")
-                == .geometryChanged(id: "defy", refreshVisibleOverlay: true)
+                == .geometryChanged(
+                    id: "defy",
+                    refreshVisibleOverlay: true,
+                    persistSelection: true
+                )
         )
         #expect(logic.currentLayer == "apps")
         #expect(logic.visibleLayer == "apps")
         #expect(logic.isVisible)
         #expect(logic.isPinned)
         #expect(logic.showFreeModifierSpace)
+    }
+
+    @Test("automatic selection changes only runtime geometry")
+    func automaticSelectionChangesOnlyRuntimeGeometry() {
+        let logic = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+
+        #expect(
+            logic.handleMessage("cheatsheet-geometry-select:defy")
+                == .geometryChanged(
+                    id: "defy",
+                    refreshVisibleOverlay: false,
+                    persistSelection: false
+                )
+        )
+        #expect(logic.selectedGeometryProfileId == "defy")
+        #expect(logic.handleMessage("cheatsheet-geometry-select:defy") == .none)
+        #expect(logic.handleMessage("cheatsheet-geometry-select:missing") == .none)
+        #expect(!logic.isVisible)
+        #expect(!logic.isPinned)
+    }
+
+    @Test("automatic selection preserves a visible pinned overlay")
+    func automaticSelectionPreservesPinnedOverlay() {
+        let logic = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+        _ = logic.handleLayerChange("apps")
+        _ = logic.handleMessage("cheatsheet-show:apps")
+        _ = logic.handleMessage("cheatsheet-space-toggle-free")
+        _ = logic.handleMessage("cheatsheet-pin-toggle:apps")
+
+        #expect(
+            logic.handleMessage("cheatsheet-geometry-select:defy")
+                == .geometryChanged(
+                    id: "defy",
+                    refreshVisibleOverlay: true,
+                    persistSelection: false
+                )
+        )
+        #expect(logic.currentLayer == "apps")
+        #expect(logic.visibleLayer == "apps")
+        #expect(logic.isVisible)
+        #expect(logic.isPinned)
+        #expect(logic.showFreeModifierSpace)
+    }
+
+    @Test("controller does not persist automatic geometry selection")
+    @MainActor
+    func controllerDoesNotPersistAutomaticGeometrySelection() throws {
+        let suite = "AutomaticGeometrySelectionTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(
+            "macbook",
+            forKey: KeyboardGeometrySelection.defaultsKey
+        )
+        let controller = OverlayController(
+            config: Config(layers: [:]),
+            registryResult: .success(geometryProfileRegistry()),
+            defaults: defaults
+        )
+
+        controller.handleMessage("cheatsheet-geometry-select:defy")
+
+        #expect(
+            defaults.string(forKey: KeyboardGeometrySelection.defaultsKey)
+                == "macbook"
+        )
+    }
+
+    @Test("automatic selection preserves the overlay delay in either event order")
+    @MainActor
+    func automaticSelectionPreservesDelayInEitherOrder() throws {
+        for selectionFirst in [true, false] {
+            NSApplication.shared.windows
+                .compactMap { $0 as? OverlayPanel }
+                .forEach { $0.orderOut(nil) }
+            let suite = "AutomaticGeometryDelayTests.\(UUID().uuidString)"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let controller = OverlayController(
+                config: Config(
+                    display: Config.Display(
+                        delay_ms: 30,
+                        fade_in_ms: 0,
+                        fade_out_ms: 0,
+                        width_percent: 75
+                    ),
+                    layers: [:]
+                ),
+                registryResult: .success(geometryProfileRegistry(trigger: "delay")),
+                defaults: defaults
+            )
+
+            if selectionFirst {
+                controller.handleMessage("cheatsheet-geometry-select:defy")
+                controller.handleLayerChange("apps")
+            } else {
+                controller.handleLayerChange("apps")
+                controller.handleMessage("cheatsheet-geometry-select:defy")
+            }
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
+
+            let visiblePanel = NSApplication.shared.windows
+                .compactMap { $0 as? OverlayPanel }
+                .last { $0.isVisible }
+            #expect(visiblePanel != nil)
+            controller.handleMessage("cheatsheet-hide")
+        }
     }
 
     @Test("controller persists default repairs and restart selection")
@@ -810,7 +931,7 @@ struct OverlayControllerTests {
         )
     }
 
-    private func geometryProfileRegistry() -> KeybindingRegistry {
+    private func geometryProfileRegistry(trigger: String = "manual") -> KeybindingRegistry {
         let position = RegistryKeyboardPosition(
             position: "KeyO",
             sourceKey: "o",
@@ -890,7 +1011,7 @@ struct OverlayControllerTests {
                         "apps": RegistryKeyboardLayer(
                             id: "apps",
                             label: "Apps",
-                            trigger: "manual",
+                            trigger: trigger,
                             overlayGroup: nil,
                             groups: [],
                             cells: [:]

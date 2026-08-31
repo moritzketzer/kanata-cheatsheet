@@ -10,7 +10,11 @@ enum OverlayAction: Equatable {
     case replace(String)
     case hide
     case refresh
-    case geometryChanged(id: String, refreshVisibleOverlay: Bool)
+    case geometryChanged(
+        id: String,
+        refreshVisibleOverlay: Bool,
+        persistSelection: Bool
+    )
     case none
 }
 
@@ -126,6 +130,15 @@ final class OverlayLogic {
     }
 
     func handleMessage(_ message: String) -> OverlayAction {
+        if message.hasPrefix("cheatsheet-geometry-select:") {
+            let id = String(message.dropFirst("cheatsheet-geometry-select:".count))
+            guard let selected = geometrySelection.select(id) else { return .none }
+            return .geometryChanged(
+                id: selected,
+                refreshVisibleOverlay: isVisible,
+                persistSelection: false
+            )
+        }
         if message.hasPrefix("cheatsheet-pin-toggle:") {
             if isPinned {
                 isPinned = false
@@ -159,7 +172,8 @@ final class OverlayLogic {
             guard let id = geometrySelection.toggle() else { return .none }
             return .geometryChanged(
                 id: id,
-                refreshVisibleOverlay: isVisible
+                refreshVisibleOverlay: isVisible,
+                persistSelection: true
             )
         case "cheatsheet-space-toggle-free":
             guard isVisible, visibleLayer == "apps" else { return .none }
@@ -246,8 +260,11 @@ final class OverlayController {
     }
 
     func handleMessage(_ message: String) {
-        delayTimer?.invalidate()
-        delayTimer = nil
+        let preservesPendingDelay = message.hasPrefix("cheatsheet-geometry-select:")
+        if !preservesPendingDelay {
+            delayTimer?.invalidate()
+            delayTimer = nil
+        }
 
         let action = logic.handleMessage(message)
         executeAction(action)
@@ -273,8 +290,10 @@ final class OverlayController {
             hideOverlay()
         case .refresh:
             refreshOverlay()
-        case .geometryChanged(let id, let refreshVisibleOverlay):
-            defaults.set(id, forKey: KeyboardGeometrySelection.defaultsKey)
+        case .geometryChanged(let id, let refreshVisibleOverlay, let persistSelection):
+            if persistSelection {
+                defaults.set(id, forKey: KeyboardGeometrySelection.defaultsKey)
+            }
             if refreshVisibleOverlay {
                 refreshOverlay()
             }
