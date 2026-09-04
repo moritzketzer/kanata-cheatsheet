@@ -627,6 +627,38 @@ struct RegistryTests {
         #expect(defy.halves?.right.thumbs.top[0]?.position?.position == "F19")
     }
 
+    @Test("projects mapped, device-local, and structural Defy slots")
+    func projectsDefyInputPaths() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionTwoFixtureData(includeGeometryProfiles: true)
+        )
+        let presentation = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                geometryProfileId: "defy"
+            )
+        )
+        guard case .defy(let left, _) = presentation.geometry else {
+            Issue.record("Expected Defy presentation")
+            return
+        }
+
+        let deviceLocal = try #require(left.rows[0][0])
+        #expect(deviceLocal.firmwareKey == "Battery Status")
+        #expect(deviceLocal.sourceKey == nil)
+        #expect(deviceLocal.key == nil)
+
+        let mapped = try #require(left.rows[0][1])
+        #expect(mapped.firmwareKey == "G")
+        #expect(mapped.sourceKey == "o")
+        #expect(mapped.key?.id == "KeyO")
+
+        #expect(left.rows[0][6] == nil)
+    }
+
     @Test("synthesizes one legacy profile when declared profiles are absent")
     func synthesizesLegacyKeyboardGeometryProfile() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())

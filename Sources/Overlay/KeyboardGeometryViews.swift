@@ -225,7 +225,7 @@ struct DefyGeometryView: View {
     }
 
     private func thumbRow(
-        _ slots: [KeyboardPresentedKey?],
+        _ slots: [KeyboardPresentedDefySlot?],
         side: KeyboardHalfSide,
         height: CGFloat
     ) -> some View {
@@ -245,11 +245,11 @@ struct DefyGeometryView: View {
 
     @ViewBuilder
     private func defySlot(
-        _ key: KeyboardPresentedKey?,
+        _ slot: KeyboardPresentedDefySlot?,
         width: CGFloat,
         height: CGFloat
     ) -> some View {
-        if let key {
+        if let key = slot?.key {
             KeyCell(
                 key: key,
                 source: source,

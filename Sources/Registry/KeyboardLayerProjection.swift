@@ -42,6 +42,13 @@ struct KeyboardPresentedGroup: Equatable, Identifiable {
 }
 
 
+struct KeyboardPresentedDefySlot: Equatable {
+    let firmwareKey: String
+    let sourceKey: String?
+    let key: KeyboardPresentedKey?
+}
+
+
 struct KeyboardPresentedDefyThumbs: Equatable {
     let label: String
     let leftTop: [KeyboardPresentedKey]
@@ -56,21 +63,21 @@ struct KeyboardPresentedDefyThumbs: Equatable {
 
 
 struct KeyboardPresentedDefyThumbRows: Equatable {
-    let top: [KeyboardPresentedKey?]
-    let bottom: [KeyboardPresentedKey?]
+    let top: [KeyboardPresentedDefySlot?]
+    let bottom: [KeyboardPresentedDefySlot?]
 
     var allKeys: [KeyboardPresentedKey] {
-        (top + bottom).compactMap { $0 }
+        (top + bottom).compactMap { $0?.key }
     }
 }
 
 
 struct KeyboardPresentedDefyHalf: Equatable {
-    let rows: [[KeyboardPresentedKey?]]
+    let rows: [[KeyboardPresentedDefySlot?]]
     let thumbs: KeyboardPresentedDefyThumbRows
 
     var allKeys: [KeyboardPresentedKey] {
-        rows.flatMap { $0 }.compactMap { $0 } + thumbs.allKeys
+        rows.flatMap { $0 }.compactMap { $0?.key } + thumbs.allKeys
     }
 }
 
@@ -365,13 +372,20 @@ enum KeyboardLayerProjector {
             func projectDefySlots(
                 _ slots: [RegistryDefySlot?],
                 prefix: String
-            ) -> [KeyboardPresentedKey?] {
+            ) -> [KeyboardPresentedDefySlot?] {
                 slots.enumerated().map { slotIndex, slot in
-                    guard let position = slot?.position else { return nil }
-                    return projectPosition(
-                        position,
-                        false,
-                        "\(prefix).slot.\(slotIndex)"
+                    guard let slot else { return nil }
+                    let key = slot.position.map {
+                        projectPosition(
+                            $0,
+                            false,
+                            "\(prefix).slot.\(slotIndex)"
+                        )
+                    }
+                    return KeyboardPresentedDefySlot(
+                        firmwareKey: slot.firmwareKey,
+                        sourceKey: slot.position?.sourceKey,
+                        key: key
                     )
                 }
             }
