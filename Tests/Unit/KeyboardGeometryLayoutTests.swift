@@ -43,15 +43,60 @@ struct KeyboardGeometryLayoutTests {
         }
     }
 
-    @Test("Defy keeps 7 7 7 6 rows and 4 plus 4 thumbs per side")
+    @Test("Defy keeps four seven-coordinate rows and 4 plus 4 thumbs per side")
     func defyShape() {
-        #expect(KeyboardGeometryMetrics.defyMainRowCounts == [7, 7, 7, 6])
+        #expect(KeyboardGeometryMetrics.defyMainRowCounts == [7, 7, 7, 7])
         #expect(KeyboardGeometryMetrics.defyTopThumbCount == 4)
         #expect(KeyboardGeometryMetrics.defyBottomThumbCount == 4)
 
         let metrics = KeyboardGeometryMetrics(keySize: 48, spacing: 4)
         #expect(metrics.defyBottomThumbHeight == 37.44)
         #expect(metrics.defyCenterGap > metrics.keySize)
+    }
+
+    @Test("Defy bottom vacancies face the center and device-local slots stay physical")
+    func defySlotKinds() {
+        let mappedKey = KeyboardPresentedKey(
+            id: "KeyQ",
+            width: 1,
+            badge: "J",
+            actionLabel: nil,
+            freeLabel: nil,
+            colorHex: nil,
+            primary: nil,
+            holdModifier: nil,
+            explanation: nil
+        )
+        let mapped = KeyboardPresentedDefySlot(
+            firmwareKey: "Q",
+            sourceKey: "q",
+            key: mappedKey
+        )
+        let deviceLocal = KeyboardPresentedDefySlot(
+            firmwareKey: "Battery Status",
+            sourceKey: nil,
+            key: nil
+        )
+        let leftBottom: [KeyboardPresentedDefySlot?] = [
+            mapped, mapped, mapped, mapped, mapped, mapped, nil,
+        ]
+        let rightBottom: [KeyboardPresentedDefySlot?] = [
+            nil, mapped, mapped, mapped, mapped, mapped, mapped,
+        ]
+
+        #expect(
+            leftBottom.map { DefySlotRenderKind(slot: $0).isVacancy }
+                == [false, false, false, false, false, false, true]
+        )
+        #expect(
+            rightBottom.map { DefySlotRenderKind(slot: $0).isVacancy }
+                == [true, false, false, false, false, false, false]
+        )
+        #expect(
+            DefySlotRenderKind(slot: deviceLocal)
+                == .quiet(firmwareKey: "Battery Status")
+        )
+        #expect(DefySlotRenderKind(slot: mapped) == .key(mappedKey))
     }
 
     @Test("Defy column stagger mirrors across the center gap")

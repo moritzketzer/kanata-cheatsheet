@@ -959,7 +959,7 @@ struct OverlayControllerTests {
             position: position
         )
         let defyHalf = RegistryDefyHalf(
-            rows: [7, 7, 7, 6].map { count in
+            rows: [7, 7, 7, 7].map { count in
                 Array(repeating: Optional(defySlot), count: count)
             },
             thumbs: RegistryDefyThumbRows(

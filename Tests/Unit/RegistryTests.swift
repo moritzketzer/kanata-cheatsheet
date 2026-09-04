@@ -244,7 +244,7 @@ private func versionTwoFixtureData(
         let makeDefyRows = {
             (positions: [[String: Any]], startsWithDeviceLocalSlot: Bool) -> [[Any]] in
             var remaining = positions
-            return [7, 7, 7, 6].enumerated().map { rowIndex, count in
+            return [7, 7, 7, 7].enumerated().map { rowIndex, count in
                 (0..<count).map { slotIndex -> Any in
                     if startsWithDeviceLocalSlot && rowIndex == 0 && slotIndex == 0 {
                         return deviceLocalDefySlot("Battery Status")
@@ -612,8 +612,8 @@ struct RegistryTests {
         #expect(profiles.map(\.id) == ["macbook", "defy"])
         #expect(profiles.map(\.kind) == ["macbook", "defy"])
         let defy = profiles[1]
-        #expect(defy.halves?.left.rows.map(\.count) == [7, 7, 7, 6])
-        #expect(defy.halves?.right.rows.map(\.count) == [7, 7, 7, 6])
+        #expect(defy.halves?.left.rows.map(\.count) == [7, 7, 7, 7])
+        #expect(defy.halves?.right.rows.map(\.count) == [7, 7, 7, 7])
         let deviceLocal = try #require(defy.halves?.left.rows[0][0])
         #expect(deviceLocal.firmwareKey == "Battery Status")
         #expect(deviceLocal.position == nil)

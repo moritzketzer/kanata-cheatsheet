@@ -7,8 +7,32 @@ enum KeyboardHalfSide {
 }
 
 
+enum DefySlotRenderKind: Equatable {
+    case vacancy
+    case quiet(firmwareKey: String)
+    case key(KeyboardPresentedKey)
+
+    init(slot: KeyboardPresentedDefySlot?) {
+        guard let slot else {
+            self = .vacancy
+            return
+        }
+        guard let key = slot.key else {
+            self = .quiet(firmwareKey: slot.firmwareKey)
+            return
+        }
+        self = .key(key)
+    }
+
+    var isVacancy: Bool {
+        if case .vacancy = self { return true }
+        return false
+    }
+}
+
+
 struct KeyboardGeometryMetrics: Equatable {
-    static let defyMainRowCounts = [7, 7, 7, 6]
+    static let defyMainRowCounts = [7, 7, 7, 7]
     static let defyTopThumbCount = 4
     static let defyBottomThumbCount = 4
 
@@ -249,15 +273,20 @@ struct DefyGeometryView: View {
         width: CGFloat,
         height: CGFloat
     ) -> some View {
-        if let key = slot?.key {
+        switch DefySlotRenderKind(slot: slot) {
+        case .vacancy:
+            Color.clear
+                .frame(width: width, height: height)
+                .accessibilityHidden(true)
+        case .quiet:
+            QuietKeyShell(width: width, height: height)
+        case .key(let key):
             KeyCell(
                 key: key,
                 source: source,
                 width: width,
                 height: height
             )
-        } else {
-            QuietKeyShell(width: width, height: height)
         }
     }
 }
