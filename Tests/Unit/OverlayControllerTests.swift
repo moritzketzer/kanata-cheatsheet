@@ -265,6 +265,103 @@ struct OverlayControllerTests {
         #expect(!logic.isPinned)
     }
 
+    @Test("input path toggles while Apps is transient and survives Fn until Mine returns")
+    func inputPathFollowsPinnedMine() {
+        let logic = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+        _ = logic.handleMessage("cheatsheet-geometry-select:defy")
+        _ = logic.handleMessage("cheatsheet-pin-toggle:mine")
+        #expect(logic.handleLayerChange("apps") == .replace("apps"))
+
+        #expect(logic.handleMessage("cheatsheet-input-path-toggle") == .refresh)
+        #expect(logic.showInputPath)
+        #expect(!logic.showsInputPath(for: "apps"))
+
+        #expect(logic.handleLayerChange("fn") == .replace("fn"))
+        #expect(logic.showInputPath)
+        #expect(!logic.showsInputPath(for: "fn"))
+
+        #expect(logic.handleLayerChange("mine") == .replace("mine"))
+        #expect(logic.showsInputPath(for: "mine"))
+        #expect(logic.handleMessage("cheatsheet-input-path-toggle") == .refresh)
+        #expect(!logic.showInputPath)
+    }
+
+    @Test("input path resets when the lens hides")
+    func inputPathResetsOnHide() {
+        let logic = activeInputPathLogic()
+
+        #expect(logic.handleMessage("cheatsheet-hide") == .hide)
+        #expect(!logic.showInputPath)
+    }
+
+    @Test("input path resets when the lens unpins")
+    func inputPathResetsOnUnpin() {
+        let logic = activeInputPathLogic()
+
+        #expect(logic.handleMessage("cheatsheet-pin-toggle:mine") == .hide)
+        #expect(!logic.showInputPath)
+    }
+
+    @Test("input path resets when geometry changes to MacBook")
+    func inputPathResetsOnMacBook() {
+        let logic = activeInputPathLogic()
+
+        #expect(
+            logic.handleMessage("cheatsheet-geometry-toggle")
+                == .geometryChanged(
+                    id: "macbook",
+                    refreshVisibleOverlay: true,
+                    persistSelection: true
+                )
+        )
+        #expect(!logic.showInputPath)
+    }
+
+    @Test("input path ignores hidden, unpinned, MacBook, and missing Mine contexts")
+    func inputPathRejectsInvalidContexts() {
+        let hidden = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+        _ = hidden.handleMessage("cheatsheet-geometry-select:defy")
+        #expect(hidden.handleMessage("cheatsheet-input-path-toggle") == .none)
+
+        let unpinned = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+        _ = unpinned.handleMessage("cheatsheet-geometry-select:defy")
+        _ = unpinned.handleMessage("cheatsheet-show:mine")
+        #expect(unpinned.handleMessage("cheatsheet-input-path-toggle") == .none)
+
+        let macbook = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+        _ = macbook.handleMessage("cheatsheet-pin-toggle:mine")
+        #expect(macbook.handleMessage("cheatsheet-input-path-toggle") == .none)
+
+        let missingMine = OverlayLogic(
+            config: Config(
+                layers: [
+                    "mine": Config.Layer(
+                        label: "Mine",
+                        trigger: "manual",
+                        groups: [:]
+                    ),
+                ]
+            ),
+            registry: geometryProfileRegistry(includeMine: false)
+        )
+        _ = missingMine.handleMessage("cheatsheet-geometry-select:defy")
+        _ = missingMine.handleMessage("cheatsheet-pin-toggle:mine")
+        #expect(missingMine.isPinned)
+        #expect(missingMine.handleMessage("cheatsheet-input-path-toggle") == .none)
+    }
+
     // MARK: - Parameterized show + same-layer LayerChange
 
     @Test("parameterized show uses target layer regardless of currentLayer")
@@ -931,7 +1028,21 @@ struct OverlayControllerTests {
         )
     }
 
-    private func geometryProfileRegistry(trigger: String = "manual") -> KeybindingRegistry {
+    private func activeInputPathLogic() -> OverlayLogic {
+        let logic = OverlayLogic(
+            config: Config(layers: [:]),
+            registry: geometryProfileRegistry()
+        )
+        _ = logic.handleMessage("cheatsheet-geometry-select:defy")
+        _ = logic.handleMessage("cheatsheet-pin-toggle:mine")
+        _ = logic.handleMessage("cheatsheet-input-path-toggle")
+        return logic
+    }
+
+    private func geometryProfileRegistry(
+        trigger: String = "manual",
+        includeMine: Bool = true
+    ) -> KeybindingRegistry {
         let position = RegistryKeyboardPosition(
             position: "KeyO",
             sourceKey: "o",
@@ -991,6 +1102,34 @@ struct OverlayControllerTests {
                 ),
             ]
         )
+        var layers: [String: RegistryKeyboardLayer] = [
+            "apps": RegistryKeyboardLayer(
+                id: "apps",
+                label: "Apps",
+                trigger: trigger,
+                overlayGroup: nil,
+                groups: [],
+                cells: [:]
+            ),
+            "fn": RegistryKeyboardLayer(
+                id: "fn",
+                label: "Fn",
+                trigger: "manual",
+                overlayGroup: nil,
+                groups: [],
+                cells: [:]
+            ),
+        ]
+        if includeMine {
+            layers["mine"] = RegistryKeyboardLayer(
+                id: "mine",
+                label: "Mine",
+                trigger: "manual",
+                overlayGroup: nil,
+                groups: [],
+                cells: [:]
+            )
+        }
         return KeybindingRegistry(
             schemaVersion: 2,
             providers: [],
@@ -1011,16 +1150,7 @@ struct OverlayControllerTests {
                     id: "keyboard-layers",
                     label: "Keyboard Layers",
                     geometry: geometry,
-                    layers: [
-                        "apps": RegistryKeyboardLayer(
-                            id: "apps",
-                            label: "Apps",
-                            trigger: trigger,
-                            overlayGroup: nil,
-                            groups: [],
-                            cells: [:]
-                        ),
-                    ]
+                    layers: layers
                 )
             )
         )

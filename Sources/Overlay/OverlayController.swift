@@ -22,6 +22,8 @@ final class OverlayLogic {
     private let config: Config
     private let registryLayerTriggers: [String: String]
     private let registryOverlayGroups: [String: String]
+    private let defyGeometryProfileIds: Set<String>
+    private let hasMineLayerMetadata: Bool
     private var geometrySelection: KeyboardGeometrySelection
     private(set) var pendingLayer: String?
     private(set) var currentLayer: String?
@@ -29,6 +31,7 @@ final class OverlayLogic {
     private(set) var isVisible = false
     private(set) var isPinned = false
     private(set) var showFreeModifierSpace = false
+    private(set) var showInputPath = false
 
     var selectedGeometryProfileId: String? {
         geometrySelection.selectedProfileId
@@ -40,10 +43,18 @@ final class OverlayLogic {
         storedGeometryProfileId: String? = nil
     ) {
         self.config = config
-        self.registryLayerTriggers = registry?.views.keyboardLayers?.layers.mapValues(\.trigger) ?? [:]
-        self.registryOverlayGroups = registry?.views.keyboardLayers?.layers.compactMapValues(\.overlayGroup) ?? [:]
+        let keyboardLayers = registry?.views.keyboardLayers
+        self.registryLayerTriggers = keyboardLayers?.layers.mapValues(\.trigger) ?? [:]
+        self.registryOverlayGroups = keyboardLayers?.layers.compactMapValues(\.overlayGroup) ?? [:]
+        self.defyGeometryProfileIds = Set(
+            keyboardLayers?.geometry?.effectiveProfiles
+                .filter { $0.kind == "defy" }
+                .map(\.id)
+                ?? []
+        )
+        self.hasMineLayerMetadata = keyboardLayers?.layers["mine"] != nil
         self.geometrySelection = KeyboardGeometrySelection(
-            geometry: registry?.views.keyboardLayers?.geometry,
+            geometry: keyboardLayers?.geometry,
             storedProfileId: storedGeometryProfileId
         )
     }
@@ -63,6 +74,19 @@ final class OverlayLogic {
             let secondGroup = registryOverlayGroups[second]
         else { return false }
         return firstGroup == secondGroup
+    }
+
+    func showsInputPath(for layer: String) -> Bool {
+        showInputPath && layer == "mine"
+    }
+
+    private func resetInputPathOutsideDefy() {
+        guard let selectedGeometryProfileId,
+              defyGeometryProfileIds.contains(selectedGeometryProfileId)
+        else {
+            showInputPath = false
+            return
+        }
     }
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
@@ -94,6 +118,7 @@ final class OverlayLogic {
                     isVisible = false
                     visibleLayer = nil
                     showFreeModifierSpace = false
+                    showInputPath = false
                     return .hide
                 }
                 return .none
@@ -115,6 +140,7 @@ final class OverlayLogic {
                 isVisible = false
                 visibleLayer = nil
                 showFreeModifierSpace = false
+                showInputPath = false
                 return .hide
             }
             return .hide
@@ -133,6 +159,7 @@ final class OverlayLogic {
         if message.hasPrefix("cheatsheet-geometry-select:") {
             let id = String(message.dropFirst("cheatsheet-geometry-select:".count))
             guard let selected = geometrySelection.select(id) else { return .none }
+            resetInputPathOutsideDefy()
             return .geometryChanged(
                 id: selected,
                 refreshVisibleOverlay: isVisible,
@@ -144,6 +171,7 @@ final class OverlayLogic {
                 isPinned = false
                 pendingLayer = nil
                 showFreeModifierSpace = false
+                showInputPath = false
                 isVisible = false
                 visibleLayer = nil
                 return .hide
@@ -154,6 +182,7 @@ final class OverlayLogic {
             isPinned = true
             isVisible = true
             visibleLayer = layer
+            showInputPath = false
             return .show(layer)
         }
         if message.hasPrefix("cheatsheet-show:") {
@@ -170,6 +199,7 @@ final class OverlayLogic {
         switch message {
         case "cheatsheet-geometry-toggle":
             guard let id = geometrySelection.toggle() else { return .none }
+            resetInputPathOutsideDefy()
             return .geometryChanged(
                 id: id,
                 refreshVisibleOverlay: isVisible,
@@ -178,6 +208,15 @@ final class OverlayLogic {
         case "cheatsheet-space-toggle-free":
             guard isVisible, visibleLayer == "apps" else { return .none }
             showFreeModifierSpace.toggle()
+            return .refresh
+        case "cheatsheet-input-path-toggle":
+            guard isVisible,
+                  isPinned,
+                  hasMineLayerMetadata,
+                  let selectedGeometryProfileId,
+                  defyGeometryProfileIds.contains(selectedGeometryProfileId)
+            else { return .none }
+            showInputPath.toggle()
             return .refresh
         case "cheatsheet-show":
             guard let layer = currentLayer, hasLayer(layer) else { return .none }
@@ -189,6 +228,7 @@ final class OverlayLogic {
             pendingLayer = nil
             isPinned = false
             showFreeModifierSpace = false
+            showInputPath = false
             if isVisible {
                 isVisible = false
                 visibleLayer = nil
@@ -201,6 +241,7 @@ final class OverlayLogic {
                 visibleLayer = nil
                 pendingLayer = nil
                 showFreeModifierSpace = false
+                showInputPath = false
                 return .hide
             }
             guard let layer = currentLayer, hasLayer(layer) else { return .none }
@@ -351,7 +392,8 @@ final class OverlayController {
             display: config.display,
             registry: registry,
             showFreeModifierSpace: logic.showFreeModifierSpace,
-            geometryProfileId: logic.selectedGeometryProfileId
+            geometryProfileId: logic.selectedGeometryProfileId,
+            showInputPath: logic.showsInputPath(for: layerName)
         )
     }
 

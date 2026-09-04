@@ -39,6 +39,7 @@ struct KeyboardView: View {
     let config: Config.Display
     let registry: KeybindingRegistry?
     let showFreeModifierSpace: Bool
+    let showInputPath: Bool
 
     let keySize: CGFloat
     let contentWidth: CGFloat
@@ -50,7 +51,8 @@ struct KeyboardView: View {
         display: Config.Display,
         registry: KeybindingRegistry? = nil,
         showFreeModifierSpace: Bool = false,
-        geometryProfileId: String? = nil
+        geometryProfileId: String? = nil,
+        showInputPath: Bool = false
     ) {
         let presentation = KeyboardLayerProjector.presentation(
             layerName: layerName,
@@ -104,6 +106,7 @@ struct KeyboardView: View {
         self.config = display
         self.registry = registry
         self.showFreeModifierSpace = showFreeModifierSpace
+        self.showInputPath = showInputPath
         self.keySize = max(28, calculatedKeySize)
         self.contentWidth = contentWidth
     }
