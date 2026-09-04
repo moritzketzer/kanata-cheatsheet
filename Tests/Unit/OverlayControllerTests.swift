@@ -780,7 +780,7 @@ struct OverlayControllerTests {
             )
         }
         return KeybindingRegistry(
-            schemaVersion: 1,
+            schemaVersion: 2,
             providers: [],
             bindings: [binding],
             diagnostics: [],
@@ -884,7 +884,7 @@ struct OverlayControllerTests {
             )
         }
         return KeybindingRegistry(
-            schemaVersion: 1,
+            schemaVersion: 2,
             providers: [],
             bindings: [],
             diagnostics: [],
@@ -954,13 +954,17 @@ struct OverlayControllerTests {
             down: arrow("ArrowDown", "down"),
             right: arrow("ArrowRight", "right")
         )
+        let defySlot = RegistryDefySlot(
+            firmwareKey: "O",
+            position: position
+        )
         let defyHalf = RegistryDefyHalf(
             rows: [7, 7, 7, 6].map { count in
-                Array(repeating: Optional(position), count: count)
+                Array(repeating: Optional(defySlot), count: count)
             },
             thumbs: RegistryDefyThumbRows(
-                top: Array(repeating: Optional(position), count: 4),
-                bottom: Array(repeating: Optional(position), count: 4)
+                top: Array(repeating: Optional(defySlot), count: 4),
+                bottom: Array(repeating: Optional(defySlot), count: 4)
             )
         )
         let geometry = RegistryKeyboardGeometry(
@@ -988,7 +992,7 @@ struct OverlayControllerTests {
             ]
         )
         return KeybindingRegistry(
-            schemaVersion: 1,
+            schemaVersion: 2,
             providers: [],
             bindings: [],
             diagnostics: [],

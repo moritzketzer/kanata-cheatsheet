@@ -41,7 +41,7 @@ struct KeybindingRegistry: Codable, Hashable {
         } catch {
             throw RegistryLoadError.invalid(path: nil, message: String(describing: error))
         }
-        guard version.schemaVersion == 1 else {
+        guard version.schemaVersion == 2 else {
             throw RegistryLoadError.unsupportedSchema(version.schemaVersion)
         }
         do {
@@ -278,15 +278,21 @@ struct RegistryDefyHalves: Codable, Hashable {
 }
 
 
+struct RegistryDefySlot: Codable, Hashable {
+    let firmwareKey: String
+    let position: RegistryKeyboardPosition?
+}
+
+
 struct RegistryDefyHalf: Codable, Hashable {
-    let rows: [[RegistryKeyboardPosition?]]
+    let rows: [[RegistryDefySlot?]]
     let thumbs: RegistryDefyThumbRows
 }
 
 
 struct RegistryDefyThumbRows: Codable, Hashable {
-    let top: [RegistryKeyboardPosition?]
-    let bottom: [RegistryKeyboardPosition?]
+    let top: [RegistryDefySlot?]
+    let bottom: [RegistryDefySlot?]
 }
 
 

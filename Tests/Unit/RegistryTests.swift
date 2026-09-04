@@ -49,7 +49,30 @@ private func namedKeyboardPosition(
 }
 
 
-private func versionOneFixtureData(
+private func defySlot(
+    _ position: [String: Any],
+    firmwareKey: String? = nil
+) -> [String: Any] {
+    let inferredLabel = position["mineKey"] as? String
+        ?? position["namedKey"] as? String
+        ?? position["position"] as? String
+        ?? "Unknown"
+    return [
+        "firmwareKey": firmwareKey ?? inferredLabel,
+        "position": position,
+    ]
+}
+
+
+private func deviceLocalDefySlot(_ firmwareKey: String) -> [String: Any] {
+    [
+        "firmwareKey": firmwareKey,
+        "position": NSNull(),
+    ]
+}
+
+
+private func versionTwoFixtureData(
     includeFooter: Bool = true,
     includeIconlessCell: Bool = false,
     includeGeometryProfiles: Bool = false
@@ -193,6 +216,17 @@ private func versionOneFixtureData(
             ],
         ],
     ]
+    let wrapDefyThumbSide = { (rawSide: Any) -> [String: Any] in
+        let side = rawSide as! [String: [[String: Any]]]
+        return [
+            "top": side["top"]!.map { defySlot($0) },
+            "bottom": side["bottom"]!.map { defySlot($0) },
+        ]
+    }
+    let defyProfileThumbs: [String: Any] = [
+        "left": wrapDefyThumbSide(defyThumbs["left"]!),
+        "right": wrapDefyThumbSide(defyThumbs["right"]!),
+    ]
     var geometry: [String: Any] = [
         "layoutId": "mine-iso",
         "rows": [keyboardRow],
@@ -208,15 +242,15 @@ private func versionOneFixtureData(
         }
         let splitIndex = (defyMainPositions.count + 1) / 2
         let makeDefyRows = {
-            (positions: [[String: Any]], startsWithEmptySlot: Bool) -> [[Any]] in
+            (positions: [[String: Any]], startsWithDeviceLocalSlot: Bool) -> [[Any]] in
             var remaining = positions
             return [7, 7, 7, 6].enumerated().map { rowIndex, count in
                 (0..<count).map { slotIndex -> Any in
-                    if startsWithEmptySlot && rowIndex == 0 && slotIndex == 0 {
-                        return NSNull()
+                    if startsWithDeviceLocalSlot && rowIndex == 0 && slotIndex == 0 {
+                        return deviceLocalDefySlot("Battery Status")
                     }
                     guard !remaining.isEmpty else { return NSNull() }
-                    return remaining.removeFirst()
+                    return defySlot(remaining.removeFirst())
                 }
             }
         }
@@ -244,11 +278,11 @@ private func versionOneFixtureData(
                 "halves": [
                     "left": [
                         "rows": leftRows,
-                        "thumbs": defyThumbs["left"]!,
+                        "thumbs": defyProfileThumbs["left"]!,
                     ],
                     "right": [
                         "rows": rightRows,
-                        "thumbs": defyThumbs["right"]!,
+                        "thumbs": defyProfileThumbs["right"]!,
                     ],
                 ],
             ],
@@ -257,7 +291,7 @@ private func versionOneFixtureData(
         geometry["defyThumbs"] = defyThumbs
     }
     let payload: [String: Any] = [
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "providers": [
             [
                 "id": "macos-symbolic-hotkeys",
@@ -480,7 +514,7 @@ struct RegistryTests {
             holdModifier: "command",
             explanation: nil
         )
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let mineLayer = try #require(registry.views.keyboardLayers?.layers["mine"])
         let mine = try #require(
             KeyboardLayerProjector.presentation(
@@ -505,9 +539,9 @@ struct RegistryTests {
         #expect(symbols.explanation == "Symbols")
     }
 
-    @Test("schema one cells without presentation use legacy icon and label")
+    @Test("schema two cells without presentation use legacy icon and label")
     func projectsLegacyPresentationFallback() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let alternateApps = try #require(
             KeyboardLayerProjector.presentation(
                 layerName: "apps-alt",
@@ -527,17 +561,17 @@ struct RegistryTests {
         #expect(chrome.explanation == "Chrome")
     }
 
-    @Test("decodes registry version one")
+    @Test("decodes registry version two")
     func decodesRegistry() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
-        #expect(registry.schemaVersion == 1)
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
+        #expect(registry.schemaVersion == 2)
         #expect(registry.views.modifierSpace.slots.count == 15)
         #expect(registry.bindings.count == 2)
     }
 
     @Test("decodes ISO keyboard layers and both icon kinds")
     func decodesKeyboardLayers() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let keyboardLayers = try #require(registry.views.keyboardLayers)
         let geometry = try #require(keyboardLayers.geometry)
         #expect(geometry.layoutId == "mine-iso")
@@ -569,7 +603,7 @@ struct RegistryTests {
     @Test("decodes ordered keyboard geometry profiles and nullable Defy slots")
     func decodesKeyboardGeometryProfiles() throws {
         let registry = try KeybindingRegistry.parse(
-            from: versionOneFixtureData(includeGeometryProfiles: true)
+            from: versionTwoFixtureData(includeGeometryProfiles: true)
         )
         let geometry = try #require(registry.views.keyboardLayers?.geometry)
         let profiles = try #require(geometry.profiles)
@@ -580,15 +614,22 @@ struct RegistryTests {
         let defy = profiles[1]
         #expect(defy.halves?.left.rows.map(\.count) == [7, 7, 7, 6])
         #expect(defy.halves?.right.rows.map(\.count) == [7, 7, 7, 6])
-        #expect(defy.halves?.left.rows[0][0] == nil)
-        #expect(defy.halves?.left.rows[0][1]?.position == "KeyO")
+        let deviceLocal = try #require(defy.halves?.left.rows[0][0])
+        #expect(deviceLocal.firmwareKey == "Battery Status")
+        #expect(deviceLocal.position == nil)
+        let mapped = try #require(defy.halves?.left.rows[0][1])
+        #expect(mapped.firmwareKey == "G")
+        #expect(mapped.position?.position == "KeyO")
+        #expect(defy.halves?.left.rows[0][6] == nil)
         #expect(defy.halves?.right.thumbs.top.count == 4)
         #expect(defy.halves?.right.thumbs.bottom.count == 4)
+        #expect(defy.halves?.right.thumbs.top[0]?.firmwareKey == "F19")
+        #expect(defy.halves?.right.thumbs.top[0]?.position?.position == "F19")
     }
 
     @Test("synthesizes one legacy profile when declared profiles are absent")
     func synthesizesLegacyKeyboardGeometryProfile() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let geometry = try #require(registry.views.keyboardLayers?.geometry)
         let profile = try #require(geometry.effectiveProfiles.first)
 
@@ -603,7 +644,7 @@ struct RegistryTests {
     @Test("projects every layer with identical semantics at shared positions")
     func projectsIdenticalSemanticsAcrossProfiles() throws {
         let registry = try KeybindingRegistry.parse(
-            from: versionOneFixtureData(includeGeometryProfiles: true)
+            from: versionTwoFixtureData(includeGeometryProfiles: true)
         )
         let keyboardLayers = try #require(registry.views.keyboardLayers)
         let expectedSharedPositionIDs = Set([
@@ -661,7 +702,7 @@ struct RegistryTests {
 
     @Test("projects compact badges and one separate arrow cluster")
     func projectsCompactBadgesAndArrowCluster() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let geometry = try #require(registry.views.keyboardLayers?.geometry)
         let scroll = try #require(
             geometry.rows.lazy.flatMap { $0 }.first { $0.position == "IntlBackslash" }
@@ -704,7 +745,7 @@ struct RegistryTests {
         #expect(KeyboardVisualSemantics.glyphScale(";") == .single)
         #expect(KeyboardVisualSemantics.glyphScale("F12") == .compact)
 
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let mine = try #require(
             KeyboardLayerProjector.presentation(
                 layerName: "mine",
@@ -740,7 +781,7 @@ struct RegistryTests {
     @Test("projects an iconless mapped cell with its label and color")
     func projectsIconlessMappedCell() throws {
         let registry = try KeybindingRegistry.parse(
-            from: versionOneFixtureData(includeIconlessCell: true)
+            from: versionTwoFixtureData(includeIconlessCell: true)
         )
         let apps = try #require(
             KeyboardLayerProjector.presentation(
@@ -759,7 +800,7 @@ struct RegistryTests {
 
     @Test("decodes and projects optional layer footer")
     func decodesAndProjectsLayerFooter() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let layer = try #require(registry.views.keyboardLayers?.layers["yabai"])
         let section = try #require(layer.footer?.sections.first)
 
@@ -779,10 +820,10 @@ struct RegistryTests {
         #expect(presentation.footer == layer.footer)
     }
 
-    @Test("decodes schema one layer without optional footer")
+    @Test("decodes schema two layer without optional footer")
     func decodesLayerWithoutFooter() throws {
         let registry = try KeybindingRegistry.parse(
-            from: versionOneFixtureData(includeFooter: false)
+            from: versionTwoFixtureData(includeFooter: false)
         )
         let layer = try #require(registry.views.keyboardLayers?.layers["yabai"])
         #expect(layer.footer == nil)
@@ -790,7 +831,7 @@ struct RegistryTests {
 
     @Test("projects all alternate apps from the registry")
     func projectsAlternateApps() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let alternateApps = try #require(
             KeyboardLayerProjector.presentation(
                 layerName: "apps-alt",
@@ -810,7 +851,7 @@ struct RegistryTests {
 
     @Test("base presentation fills Mine labels and keeps semantic actions")
     func projectsBaseKeysAndActions() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let mine = try #require(
             KeyboardLayerProjector.presentation(
                 layerName: "mine",
@@ -835,7 +876,7 @@ struct RegistryTests {
 
     @Test("projects passthrough keys quietly and omits their legend group")
     func projectsPassthroughQuietly() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let yabai = try #require(
             KeyboardLayerProjector.presentation(
                 layerName: "yabai",
@@ -856,7 +897,7 @@ struct RegistryTests {
 
     @Test("projects Defy thumbs in checked physical order")
     func projectsDefyThumbs() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let mine = try #require(
             KeyboardLayerProjector.presentation(
                 layerName: "mine",
@@ -878,7 +919,7 @@ struct RegistryTests {
 
     @Test("search covers gesture action context tags and source")
     func searchCoversAllFields() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         #expect(
             RegistryQuery(search: "spotlight").filter(registry).map(\.id)
                 == ["macos.spotlight"]
@@ -895,14 +936,14 @@ struct RegistryTests {
 
     @Test("provider and ownership filters compose")
     func filtersCompose() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let query = RegistryQuery(provider: "aerc", ownership: "observed")
         #expect(query.filter(registry).map(\.id) == ["aerc.compose-review.send"])
     }
 
     @Test("Explorer defaults to its projection while search remains global")
     func explorerProjectionAndGlobalSearch() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let defaultIDs = Set(try #require(registry.views.explorerDefault).bindingIds)
 
         #expect(
@@ -919,7 +960,7 @@ struct RegistryTests {
 
     @Test("registry layers replace matching legacy layers only")
     func registryLayersOverrideMatchingLegacyLayers() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let apps = KeyboardLayerProjector.presentation(
             layerName: "apps",
             legacyLayer: Config.Layer(label: "Legacy Apps"),
@@ -941,7 +982,7 @@ struct RegistryTests {
 
     @Test("occupied-only and show-free projections use mine badges")
     func projectsOccupiedAndFreeKeys() throws {
-        let registry = try KeybindingRegistry.parse(from: versionOneFixtureData())
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let occupied = try #require(
             KeyboardLayerProjector.presentation(
                 layerName: "apps",
@@ -977,8 +1018,8 @@ struct RegistryTests {
 
     @Test("invalid schema reports concrete version")
     func rejectsUnknownSchema() {
-        let data = Data(#"{"schemaVersion":2}"#.utf8)
-        #expect(throws: RegistryLoadError.unsupportedSchema(2)) {
+        let data = Data(#"{"schemaVersion":3}"#.utf8)
+        #expect(throws: RegistryLoadError.unsupportedSchema(3)) {
             try KeybindingRegistry.parse(from: data)
         }
     }

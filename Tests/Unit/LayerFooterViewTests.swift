@@ -78,7 +78,7 @@ struct LayerFooterViewTests {
             }
         }
         return KeybindingRegistry(
-            schemaVersion: 1,
+            schemaVersion: 2,
             providers: [],
             bindings: [],
             diagnostics: [],

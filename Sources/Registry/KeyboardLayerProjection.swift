@@ -363,17 +363,16 @@ enum KeyboardLayerProjector {
             }
 
             func projectDefySlots(
-                _ positions: [RegistryKeyboardPosition?],
+                _ slots: [RegistryDefySlot?],
                 prefix: String
             ) -> [KeyboardPresentedKey?] {
-                positions.enumerated().map { slotIndex, position in
-                    position.map {
-                        projectPosition(
-                            $0,
-                            false,
-                            "\(prefix).slot.\(slotIndex)"
-                        )
-                    }
+                slots.enumerated().map { slotIndex, slot in
+                    guard let position = slot?.position else { return nil }
+                    return projectPosition(
+                        position,
+                        false,
+                        "\(prefix).slot.\(slotIndex)"
+                    )
                 }
             }
 
