@@ -45,6 +45,7 @@ struct KeyboardPresentedGroup: Equatable, Identifiable {
 struct KeyboardPresentedDefySlot: Equatable {
     let firmwareKey: String
     let sourceKey: String?
+    let mineHoldModifier: String?
     let key: KeyboardPresentedKey?
 }
 
@@ -307,15 +308,12 @@ enum KeyboardLayerProjector {
                 } else if let presentation = cell?.presentation {
                     primary = presentation.primary
                     holdModifier = presentation.holdModifier
-                        ?? (showBaseKeys ? position.mineHoldModifier : nil)
                     explanation = presentation.explanation
                 } else {
                     primary = cell?.icon.map {
                         RegistryKeyVisual(kind: $0.kind, token: $0.token)
                     }
-                    holdModifier = showBaseKeys
-                        ? position.mineHoldModifier
-                        : nil
+                    holdModifier = nil
                     explanation = cell?.actionLabel
                 }
                 return KeyboardPresentedKey(
@@ -388,6 +386,7 @@ enum KeyboardLayerProjector {
                     return KeyboardPresentedDefySlot(
                         firmwareKey: slot.firmwareKey,
                         sourceKey: slot.position?.sourceKey,
+                        mineHoldModifier: slot.position?.mineHoldModifier,
                         key: key
                     )
                 }

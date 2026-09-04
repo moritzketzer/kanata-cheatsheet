@@ -651,15 +651,39 @@ struct RegistryTests {
         let deviceLocal = try #require(left.rows[0][0])
         #expect(deviceLocal.firmwareKey == "Battery Status")
         #expect(deviceLocal.sourceKey == nil)
+        #expect(deviceLocal.mineHoldModifier == nil)
         #expect(deviceLocal.key == nil)
 
         let mapped = try #require(left.rows[0][1])
         #expect(mapped.firmwareKey == "G")
         #expect(mapped.sourceKey == "o")
         #expect(mapped.key?.id == "KeyO")
-        #expect(mapped.key?.holdModifier == "control")
+        #expect(mapped.mineHoldModifier == "control")
+        #expect(mapped.key?.holdModifier == nil)
 
         #expect(left.rows[0][6] == nil)
+    }
+
+    @Test(
+        "ordinary Mine projections do not consume input-path-only holds",
+        arguments: ["macbook", "defy"]
+    )
+    func ordinaryMineOmitsInputPathHolds(_ profileID: String) throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionTwoFixtureData(includeGeometryProfiles: true)
+        )
+        let presentation = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                geometryProfileId: profileID
+            )
+        )
+        let key = try #require(presentation.key(at: "KeyO"))
+
+        #expect(key.holdModifier == nil)
     }
 
     @Test("synthesizes one legacy profile when declared profiles are absent")

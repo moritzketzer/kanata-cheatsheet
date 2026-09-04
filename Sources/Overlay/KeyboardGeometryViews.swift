@@ -64,7 +64,7 @@ struct KeyboardInputPathLabels: Equatable {
             ?? key.keyLabel
             ?? key.actionLabel
             ?? key.badge
-        let hold = key.holdModifier.flatMap(
+        let hold = (key.holdModifier ?? slot.mineHoldModifier).flatMap(
             KeyboardVisualSemantics.modifierGlyph
         )
         let mineParts = [tap, hold].compactMap { $0 }

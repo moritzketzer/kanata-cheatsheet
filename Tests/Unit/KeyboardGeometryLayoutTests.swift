@@ -72,11 +72,13 @@ struct KeyboardGeometryLayoutTests {
         let mapped = KeyboardPresentedDefySlot(
             firmwareKey: "Q",
             sourceKey: "q",
+            mineHoldModifier: nil,
             key: mappedKey
         )
         let deviceLocal = KeyboardPresentedDefySlot(
             firmwareKey: "Battery Status",
             sourceKey: nil,
+            mineHoldModifier: nil,
             key: nil
         )
         let leftBottom: [KeyboardPresentedDefySlot?] = [
@@ -129,17 +131,33 @@ struct KeyboardGeometryLayoutTests {
         #expect(KeyboardInputPathLabels.resolve(badge).mine == "C")
     }
 
-    @Test("input path labels append the Home Row Mod hold glyph")
-    func inputPathHomeRowMod() {
-        let slot = inputPathSlot(key: presentedKey(
-            badge: "C",
-            holdModifier: "control"
-        ))
+    @Test(
+        "input path labels append all Mine Home Row Mod hold glyphs",
+        arguments: [
+            ("C", "control", "C / ⌃"),
+            ("R", "option", "R / ⌥"),
+            ("I", "shift", "I / ⇧"),
+            ("E", "command", "E / ⌘"),
+            ("N", "command", "N / ⌘"),
+            ("T", "shift", "T / ⇧"),
+            ("S", "option", "S / ⌥"),
+            ("H", "control", "H / ⌃"),
+        ]
+    )
+    func inputPathHomeRowMods(
+        _ badge: String,
+        _ modifier: String,
+        _ expected: String
+    ) {
+        let slot = inputPathSlot(
+            key: presentedKey(badge: badge),
+            mineHoldModifier: modifier
+        )
         let labels = KeyboardInputPathLabels.resolve(slot)
 
         #expect(labels.firmware == "A")
         #expect(labels.source == "a")
-        #expect(labels.mine == "C / ⌃")
+        #expect(labels.mine == expected)
         #expect(!labels.isDeviceLocal)
     }
 
@@ -148,6 +166,7 @@ struct KeyboardGeometryLayoutTests {
         let deviceLocal = KeyboardPresentedDefySlot(
             firmwareKey: "Bluetooth Pairing",
             sourceKey: nil,
+            mineHoldModifier: nil,
             key: nil
         )
         let labels = KeyboardInputPathLabels.resolve(deviceLocal)
@@ -182,10 +201,8 @@ struct KeyboardGeometryLayoutTests {
         let slot = KeyboardPresentedDefySlot(
             firmwareKey: "Bluetooth Pairing",
             sourceKey: "international_backslash",
-            key: presentedKey(
-                actionLabel: "Scroll / Symbols",
-                holdModifier: "command"
-            )
+            mineHoldModifier: "command",
+            key: presentedKey(actionLabel: "Scroll / Symbols")
         )
         let host = NSHostingView(rootView: KeyboardInputPathCell(
             slot: slot,
@@ -211,11 +228,13 @@ struct KeyboardGeometryLayoutTests {
     }
 
     private func inputPathSlot(
-        key: KeyboardPresentedKey
+        key: KeyboardPresentedKey,
+        mineHoldModifier: String? = nil
     ) -> KeyboardPresentedDefySlot {
         KeyboardPresentedDefySlot(
             firmwareKey: "A",
             sourceKey: "a",
+            mineHoldModifier: mineHoldModifier,
             key: key
         )
     }
