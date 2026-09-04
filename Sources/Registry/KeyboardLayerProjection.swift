@@ -307,12 +307,15 @@ enum KeyboardLayerProjector {
                 } else if let presentation = cell?.presentation {
                     primary = presentation.primary
                     holdModifier = presentation.holdModifier
+                        ?? (showBaseKeys ? position.mineHoldModifier : nil)
                     explanation = presentation.explanation
                 } else {
                     primary = cell?.icon.map {
                         RegistryKeyVisual(kind: $0.kind, token: $0.token)
                     }
-                    holdModifier = nil
+                    holdModifier = showBaseKeys
+                        ? position.mineHoldModifier
+                        : nil
                     explanation = cell?.actionLabel
                 }
                 return KeyboardPresentedKey(

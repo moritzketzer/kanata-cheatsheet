@@ -11,10 +11,18 @@ enum DefySlotRenderKind: Equatable {
     case vacancy
     case quiet(firmwareKey: String)
     case key(KeyboardPresentedKey)
+    case inputPath(KeyboardPresentedDefySlot)
 
-    init(slot: KeyboardPresentedDefySlot?) {
+    init(
+        slot: KeyboardPresentedDefySlot?,
+        showInputPath: Bool = false
+    ) {
         guard let slot else {
             self = .vacancy
+            return
+        }
+        guard !showInputPath else {
+            self = .inputPath(slot)
             return
         }
         guard let key = slot.key else {
@@ -27,6 +35,46 @@ enum DefySlotRenderKind: Equatable {
     var isVacancy: Bool {
         if case .vacancy = self { return true }
         return false
+    }
+}
+
+
+struct KeyboardInputPathLabels: Equatable {
+    static let caption = "FIRMWARE -> KANATA SOURCE -> MINE (TAP / HOLD)"
+
+    let firmware: String
+    let source: String?
+    let mine: String?
+    let isDeviceLocal: Bool
+
+    static func resolve(
+        _ slot: KeyboardPresentedDefySlot
+    ) -> KeyboardInputPathLabels {
+        guard let key = slot.key else {
+            return KeyboardInputPathLabels(
+                firmware: slot.firmwareKey,
+                source: nil,
+                mine: nil,
+                isDeviceLocal: true
+            )
+        }
+
+        let tap = key.explanation
+            ?? key.primary?.token
+            ?? key.keyLabel
+            ?? key.actionLabel
+            ?? key.badge
+        let hold = key.holdModifier.flatMap(
+            KeyboardVisualSemantics.modifierGlyph
+        )
+        let mineParts = [tap, hold].compactMap { $0 }
+
+        return KeyboardInputPathLabels(
+            firmware: slot.firmwareKey,
+            source: slot.sourceKey,
+            mine: mineParts.isEmpty ? nil : mineParts.joined(separator: " / "),
+            isDeviceLocal: false
+        )
     }
 }
 
@@ -177,11 +225,25 @@ struct DefyGeometryView: View {
     let right: KeyboardPresentedDefyHalf
     let source: KeyboardPresentationSource
     let metrics: KeyboardGeometryMetrics
+    let showInputPath: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: metrics.defyCenterGap) {
-            half(left, side: .left)
-            half(right, side: .right)
+        VStack(spacing: metrics.keySize * 0.16) {
+            if showInputPath {
+                Text(KeyboardInputPathLabels.caption)
+                    .font(.system(
+                        size: metrics.keySize * 0.13,
+                        weight: .semibold,
+                        design: .monospaced
+                    ))
+                    .foregroundStyle(Color(hex: "#6c7086"))
+                    .tracking(1)
+            }
+
+            HStack(alignment: .top, spacing: metrics.defyCenterGap) {
+                half(left, side: .left)
+                half(right, side: .right)
+            }
         }
     }
 
@@ -273,7 +335,10 @@ struct DefyGeometryView: View {
         width: CGFloat,
         height: CGFloat
     ) -> some View {
-        switch DefySlotRenderKind(slot: slot) {
+        switch DefySlotRenderKind(
+            slot: slot,
+            showInputPath: showInputPath
+        ) {
         case .vacancy:
             Color.clear
                 .frame(width: width, height: height)
@@ -287,7 +352,104 @@ struct DefyGeometryView: View {
                 width: width,
                 height: height
             )
+        case .inputPath(let slot):
+            KeyboardInputPathCell(
+                slot: slot,
+                width: width,
+                height: height
+            )
         }
+    }
+}
+
+
+@available(macOS 14, *)
+struct KeyboardInputPathCell: View {
+    private static let minimumScaleFactor = 0.42
+
+    let slot: KeyboardPresentedDefySlot
+    let width: CGFloat
+    let height: CGFloat
+
+    private var labels: KeyboardInputPathLabels {
+        KeyboardInputPathLabels.resolve(slot)
+    }
+
+    private var accessibilityText: String {
+        if labels.isDeviceLocal {
+            return "Firmware \(labels.firmware), device local"
+        }
+        return [
+            "Firmware \(labels.firmware)",
+            labels.source.map { "Kanata source \($0)" },
+            labels.mine.map { "Mine \($0)" },
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(labels.firmware)
+                .font(.system(
+                    size: height * 0.14,
+                    weight: .semibold,
+                    design: .monospaced
+                ))
+                .foregroundStyle(Color(hex: "#cba6f7"))
+                .lineLimit(2)
+                .minimumScaleFactor(Self.minimumScaleFactor)
+                .multilineTextAlignment(.center)
+
+            if labels.isDeviceLocal {
+                Text("DEVICE-LOCAL")
+                    .font(.system(
+                        size: height * 0.115,
+                        weight: .medium,
+                        design: .monospaced
+                    ))
+                    .foregroundStyle(Color(hex: "#6c7086"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(Self.minimumScaleFactor)
+            } else {
+                if let source = labels.source {
+                    Text(source)
+                        .font(.system(
+                            size: height * 0.12,
+                            design: .monospaced
+                        ))
+                        .foregroundStyle(Color(hex: "#6c7086"))
+                        .lineLimit(1)
+                        .minimumScaleFactor(Self.minimumScaleFactor)
+                }
+
+                if let mine = labels.mine {
+                    Text(mine)
+                        .font(.system(
+                            size: height * 0.14,
+                            weight: .semibold,
+                            design: .monospaced
+                        ))
+                        .foregroundStyle(Color(hex: "#cdd6f4"))
+                        .lineLimit(2)
+                        .minimumScaleFactor(Self.minimumScaleFactor)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(3)
+        .frame(width: width, height: height)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(hex: "#313244").opacity(0.34))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(hex: "#cba6f7").opacity(0.16), lineWidth: 1)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
     }
 }
 

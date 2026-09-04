@@ -120,6 +120,7 @@ private func versionTwoFixtureData(
         "position": "KeyO",
         "sourceKey": "o",
         "mineKey": "G",
+        "mineHoldModifier": "control",
         "width": 1.0,
     ]
     let keyboardRow: [[String: Any]] = [
@@ -620,6 +621,7 @@ struct RegistryTests {
         let mapped = try #require(defy.halves?.left.rows[0][1])
         #expect(mapped.firmwareKey == "G")
         #expect(mapped.position?.position == "KeyO")
+        #expect(mapped.position?.mineHoldModifier == "control")
         #expect(defy.halves?.left.rows[0][6] == nil)
         #expect(defy.halves?.right.thumbs.top.count == 4)
         #expect(defy.halves?.right.thumbs.bottom.count == 4)
@@ -655,6 +657,7 @@ struct RegistryTests {
         #expect(mapped.firmwareKey == "G")
         #expect(mapped.sourceKey == "o")
         #expect(mapped.key?.id == "KeyO")
+        #expect(mapped.key?.holdModifier == "control")
 
         #expect(left.rows[0][6] == nil)
     }

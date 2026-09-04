@@ -691,6 +691,47 @@ struct OverlayControllerTests {
         controller.handleMessage("cheatsheet-hide")
     }
 
+    @Test("input path refits the same non-activating panel")
+    @MainActor
+    func inputPathRefitsSamePanel() throws {
+        let suite = "InputPathPanelTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(geometryProfileRegistry()),
+            defaults: defaults
+        )
+
+        controller.handleMessage("cheatsheet-geometry-select:defy")
+        controller.handleMessage("cheatsheet-pin-toggle:mine")
+        let ordinaryPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let ordinaryFrame = ordinaryPanel.frame
+
+        controller.handleMessage("cheatsheet-input-path-toggle")
+        let inputPathPanel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+
+        #expect(inputPathPanel === ordinaryPanel)
+        #expect(inputPathPanel.frame.height > ordinaryFrame.height)
+        #expect(inputPathPanel.styleMask.contains(.nonactivatingPanel))
+        #expect(
+            try #require(inputPathPanel.contentView).fittingSize.height
+                <= inputPathPanel.frame.height
+        )
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
     @Test("toggling free modifier-space slots resizes the overlay both ways")
     @MainActor
     func togglingFreeSlotsResizesOverlayBothWays() throws {

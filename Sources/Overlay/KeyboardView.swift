@@ -121,7 +121,7 @@ struct KeyboardView: View {
 
             geometryContent
 
-            if presentation.hasHoldModifiers {
+            if presentation.hasHoldModifiers && !showInputPath {
                 Text("KEY ↖   TAP ●   HOLD ↘")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Color(hex: "#6c7086"))
@@ -189,7 +189,8 @@ struct KeyboardView: View {
                 left: left,
                 right: right,
                 source: presentation.source,
-                metrics: metrics
+                metrics: metrics,
+                showInputPath: showInputPath
             )
         case .legacy(let rows, let arrows, let thumbs):
             LegacyKeyboardGeometryView(

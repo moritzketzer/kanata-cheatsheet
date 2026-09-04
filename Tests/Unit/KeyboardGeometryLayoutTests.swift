@@ -1,4 +1,6 @@
+import AppKit
 import CoreGraphics
+import SwiftUI
 import Testing
 
 
@@ -99,6 +101,104 @@ struct KeyboardGeometryLayoutTests {
         #expect(DefySlotRenderKind(slot: mapped) == .key(mappedKey))
     }
 
+    @Test("input path labels follow Mine presentation priority")
+    func inputPathLabelPriority() {
+        let explanation = inputPathSlot(key: presentedKey(
+            badge: "B",
+            actionLabel: "Action",
+            primary: RegistryKeyVisual(kind: "glyph", token: "Visual"),
+            explanation: "Explanation",
+            keyLabel: "Key"
+        ))
+        let visual = inputPathSlot(key: presentedKey(
+            actionLabel: "Action",
+            primary: RegistryKeyVisual(kind: "glyph", token: "Visual"),
+            keyLabel: "Key"
+        ))
+        let keyLabel = inputPathSlot(key: presentedKey(
+            actionLabel: "Action",
+            keyLabel: "Key"
+        ))
+        let action = inputPathSlot(key: presentedKey(actionLabel: "Action"))
+        let badge = inputPathSlot(key: presentedKey(badge: "C"))
+
+        #expect(KeyboardInputPathLabels.resolve(explanation).mine == "Explanation")
+        #expect(KeyboardInputPathLabels.resolve(visual).mine == "Visual")
+        #expect(KeyboardInputPathLabels.resolve(keyLabel).mine == "Key")
+        #expect(KeyboardInputPathLabels.resolve(action).mine == "Action")
+        #expect(KeyboardInputPathLabels.resolve(badge).mine == "C")
+    }
+
+    @Test("input path labels append the Home Row Mod hold glyph")
+    func inputPathHomeRowMod() {
+        let slot = inputPathSlot(key: presentedKey(
+            badge: "C",
+            holdModifier: "control"
+        ))
+        let labels = KeyboardInputPathLabels.resolve(slot)
+
+        #expect(labels.firmware == "A")
+        #expect(labels.source == "a")
+        #expect(labels.mine == "C / ⌃")
+        #expect(!labels.isDeviceLocal)
+    }
+
+    @Test("input path distinguishes device-local keys from structural vacancies")
+    func inputPathSlotKinds() {
+        let deviceLocal = KeyboardPresentedDefySlot(
+            firmwareKey: "Bluetooth Pairing",
+            sourceKey: nil,
+            key: nil
+        )
+        let labels = KeyboardInputPathLabels.resolve(deviceLocal)
+
+        #expect(labels.firmware == "Bluetooth Pairing")
+        #expect(labels.source == nil)
+        #expect(labels.mine == nil)
+        #expect(labels.isDeviceLocal)
+        #expect(
+            DefySlotRenderKind(slot: deviceLocal, showInputPath: true)
+                == .inputPath(deviceLocal)
+        )
+        #expect(
+            DefySlotRenderKind(slot: nil, showInputPath: true)
+                == .vacancy
+        )
+    }
+
+    @Test("input path caption names all three levels")
+    func inputPathCaption() {
+        #expect(
+            KeyboardInputPathLabels.caption
+                == "FIRMWARE -> KANATA SOURCE -> MINE (TAP / HOLD)"
+        )
+    }
+
+    @Test("long input path labels stay inside one Defy cell")
+    @MainActor
+    func longInputPathLabelsFit() {
+        let width: CGFloat = 64
+        let height: CGFloat = 64
+        let slot = KeyboardPresentedDefySlot(
+            firmwareKey: "Bluetooth Pairing",
+            sourceKey: "international_backslash",
+            key: presentedKey(
+                actionLabel: "Scroll / Symbols",
+                holdModifier: "command"
+            )
+        )
+        let host = NSHostingView(rootView: KeyboardInputPathCell(
+            slot: slot,
+            width: width,
+            height: height
+        ))
+        host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        host.layoutSubtreeIfNeeded()
+
+        #expect(host.fittingSize.width <= width)
+        #expect(host.fittingSize.height <= height)
+    }
+
     @Test("Defy column stagger mirrors across the center gap")
     func defyColumnStaggerMirrors() {
         let metrics = KeyboardGeometryMetrics(keySize: 48, spacing: 4)
@@ -108,5 +208,37 @@ struct KeyboardGeometryLayoutTests {
         #expect(left.count == 7)
         #expect(right == Array(left.reversed()))
         #expect(Set(left).count > 2)
+    }
+
+    private func inputPathSlot(
+        key: KeyboardPresentedKey
+    ) -> KeyboardPresentedDefySlot {
+        KeyboardPresentedDefySlot(
+            firmwareKey: "A",
+            sourceKey: "a",
+            key: key
+        )
+    }
+
+    private func presentedKey(
+        badge: String? = nil,
+        actionLabel: String? = nil,
+        primary: RegistryKeyVisual? = nil,
+        holdModifier: String? = nil,
+        explanation: String? = nil,
+        keyLabel: String? = nil
+    ) -> KeyboardPresentedKey {
+        KeyboardPresentedKey(
+            id: "KeyA",
+            width: 1,
+            badge: badge,
+            actionLabel: actionLabel,
+            freeLabel: nil,
+            colorHex: nil,
+            primary: primary,
+            holdModifier: holdModifier,
+            explanation: explanation,
+            keyLabel: keyLabel
+        )
     }
 }
