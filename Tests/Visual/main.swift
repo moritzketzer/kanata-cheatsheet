@@ -126,6 +126,31 @@ private struct VisualRenderer {
                 ))
             }
 
+            if profile.kind == "defy" {
+                let layerId = "mine-input-path"
+                let view = KeyboardView(
+                    layerName: "mine",
+                    legacyLayer: nil,
+                    display: display,
+                    registry: registry,
+                    showFreeModifierSpace: false,
+                    geometryProfileId: profile.id,
+                    showInputPath: true
+                )
+                let rendered = try render(view: view, layerId: layerId)
+                let relativePath = "\(profile.id)/\(layerId).png"
+                let imageURL = outputURL.appendingPathComponent(relativePath)
+                try writeVerified(rendered.data, to: imageURL)
+                imageRecords.append(RenderedImage(
+                    path: relativePath,
+                    profileId: profile.id,
+                    layerId: layerId,
+                    width: rendered.width,
+                    height: rendered.height,
+                    sha256: sha256(rendered.data)
+                ))
+            }
+
             let sheetData = try contactSheet(
                 profileLabel: profile.label,
                 layers: renderedLayers
