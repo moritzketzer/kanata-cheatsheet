@@ -227,6 +227,113 @@ struct KeyboardGeometryLayoutTests {
         #expect(Set(left).count > 2)
     }
 
+    @Test("Defy fan requires all sixteen IDs in physical array order")
+    func identifiedThumbPair() {
+        func rows(_ ids: [String?]) -> KeyboardPresentedDefyThumbRows {
+            let slots = ids.map { id in
+                KeyboardPresentedDefySlot(
+                    firmwareKey: "F14", sourceKey: "f14", mineHoldModifier: nil,
+                    key: nil, physicalId: id
+                )
+            }
+            return KeyboardPresentedDefyThumbRows(top: Array(slots.prefix(4)), bottom: Array(slots.suffix(4)))
+        }
+        let left: [String?] = (1...8).map { "LT\($0)" }
+        let right: [String?] = [4, 3, 2, 1, 8, 7, 6, 5].map { "RT\($0)" }
+        #expect(DefyThumbGeometry.isIdentified(left: rows(left), right: rows(right)))
+        for index in 0..<8 {
+            for wrongID: String? in [nil, "LT9", "RT1", "LT\(index == 0 ? 2 : 1)"] {
+                var invalid = left
+                invalid[index] = wrongID
+                #expect(!DefyThumbGeometry.isIdentified(left: rows(invalid), right: rows(right)))
+            }
+            var invalidRight = right
+            invalidRight[index] = nil
+            #expect(!DefyThumbGeometry.isIdentified(left: rows(left), right: rows(invalidRight)))
+        }
+        var swapped = right
+        swapped.swapAt(0, 1)
+        #expect(!DefyThumbGeometry.isIdentified(left: rows(left), right: rows(swapped)))
+        #expect(!DefyThumbGeometry.isIdentified(left: rows(Array(repeating: nil, count: 8)), right: rows(right)))
+    }
+
+    @Test("Defy fan mirrors outlines and keeps horizontal content inside each key", arguments: [CGFloat(28), CGFloat(64)])
+    func thumbFanGeometry(_ keySize: CGFloat) {
+        let left = DefyThumbGeometry(side: .left, keySize: keySize)
+        let right = DefyThumbGeometry(side: .right, keySize: keySize)
+        #expect(left.keys.count == 8 && right.keys.count == 8)
+        #expect(left.keys.map(\.id) == (1...8).map { "LT\($0)" })
+        #expect(right.keys.map(\.id) == (1...8).map { "RT\($0)" })
+        #expect(left.size == right.size)
+        #expect(left.size.width < 7 * keySize)
+        #expect(left.keys[0].path.boundingRect.width > left.keys[1].path.boundingRect.width)
+        #expect(left.keys[7].path.boundingRect.height > left.keys[3].path.boundingRect.height)
+        for (l, r) in zip(left.keys, right.keys) {
+            #expect(abs(l.content.midX + r.content.midX - left.size.width) < 0.001)
+            #expect(l.content.size == r.content.size)
+            #expect(l.content.minY == r.content.minY)
+            for (lp, rp) in zip(l.outline, r.outline) {
+                #expect(abs(lp.x + rp.x - left.size.width) < 0.001)
+                #expect(lp.y == rp.y)
+            }
+        }
+        for geometry in [left, right] {
+            for key in geometry.keys {
+                let rect = key.content
+                #expect(rect.height >= 20)
+                for x in [rect.minX, rect.maxX] {
+                    for y in [rect.minY, rect.maxY] {
+                        #expect(key.path.contains(CGPoint(x: x, y: y)), "\(key.id) content corner")
+                    }
+                }
+                #expect(CGRect(origin: .zero, size: geometry.size).contains(key.path.boundingRect))
+            }
+            // Sample interiors, not bounding rectangles: angled neighbors share bounds.
+            for x in stride(from: CGFloat(0), through: geometry.size.width, by: keySize / 12) {
+                for y in stride(from: CGFloat(0), through: geometry.size.height, by: keySize / 12) {
+                    let point = CGPoint(x: x, y: y)
+                    #expect(geometry.keys.filter { $0.path.contains(point) }.count <= 1)
+                }
+            }
+        }
+    }
+
+    @Test("identified Defy views reserve the full fan and fall back as a pair", arguments: [CGFloat(28), CGFloat(64)])
+    @MainActor
+    func thumbFanViewSize(_ keySize: CGFloat) {
+        func half(_ side: String, identified: Bool) -> KeyboardPresentedDefyHalf {
+            let numbers = side == "L" ? Array(1...8) : [4, 3, 2, 1, 8, 7, 6, 5]
+            let slots = numbers.map { number in
+                KeyboardPresentedDefySlot(
+                    firmwareKey: "F14", sourceKey: "f14", mineHoldModifier: nil,
+                    key: presentedKey(actionLabel: "Space / Apps"),
+                    physicalId: identified ? "\(side)T\(number)" : nil
+                )
+            }
+            return KeyboardPresentedDefyHalf(
+                rows: Array(repeating: Array(repeating: nil, count: 7), count: 4),
+                thumbs: KeyboardPresentedDefyThumbRows(top: Array(slots.prefix(4)), bottom: Array(slots.suffix(4)))
+            )
+        }
+        for inputPath in [false, true] {
+            func size(_ left: Bool, _ right: Bool) -> CGSize {
+                let host = NSHostingView(rootView: DefyGeometryView(
+                    left: half("L", identified: left), right: half("R", identified: right),
+                    source: .registry, metrics: KeyboardGeometryMetrics(keySize: keySize, spacing: 4),
+                    showInputPath: inputPath
+                ))
+                host.layoutSubtreeIfNeeded()
+                return host.fittingSize
+            }
+            let legacy = size(false, false)
+            let fan = size(true, true)
+            #expect(fan.height > legacy.height + keySize)
+            #expect(abs(fan.width - legacy.width) < 0.001)
+            #expect(size(true, false) == legacy)
+            #expect(size(false, true) == legacy)
+        }
+    }
+
     private func inputPathSlot(
         key: KeyboardPresentedKey,
         mineHoldModifier: String? = nil

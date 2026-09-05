@@ -310,6 +310,7 @@ struct KeyCell: View {
     let source: KeyboardPresentationSource
     let width: CGFloat
     let height: CGFloat
+    var physicalId: String? = nil
 
     @Environment(\.isYabaiLayer) private var isYabaiLayer
 
@@ -324,7 +325,38 @@ struct KeyCell: View {
         key.colorHex.map(Color.init(hex:)) ?? Color(hex: "#cdd6f4")
     }
 
+    var fillColor: Color {
+        isOccupied ? color.opacity(0.12) : Color(hex: "#313244").opacity(0.28)
+    }
+
+    var strokeColor: Color {
+        isOccupied ? color.opacity(0.24) : Color(hex: "#cdd6f4").opacity(0.06)
+    }
+
     var body: some View {
+        content
+            .background(RoundedRectangle(cornerRadius: 6).fill(fillColor))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(strokeColor, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    var content: some View {
+        if let physicalId {
+            VStack(spacing: 1) {
+                Text(physicalId)
+                    .font(.system(size: max(6, height * 0.15), weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color(hex: "#a6adc8"))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                actionContent
+            }
+            .frame(width: width, height: height)
+        } else {
+            ordinaryContent
+        }
+    }
+
+    private var ordinaryContent: some View {
         ZStack(alignment: .topLeading) {
             if let badge = key.badge {
                 Text(badge)
@@ -343,30 +375,18 @@ struct KeyCell: View {
                     .padding(5)
             }
 
-            if source == .registry {
-                registryContent
-            } else {
-                legacyContent
-            }
+            actionContent
         }
         .frame(width: width, height: height)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(
-                    isOccupied
-                        ? color.opacity(0.12)
-                        : Color(hex: "#313244").opacity(0.28)
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(
-                    isOccupied
-                        ? color.opacity(0.24)
-                        : Color(hex: "#cdd6f4").opacity(0.06),
-                    lineWidth: 1
-                )
-        )
+    }
+
+    @ViewBuilder
+    private var actionContent: some View {
+        if source == .registry {
+            registryContent
+        } else {
+            legacyContent
+        }
     }
 
     @ViewBuilder
@@ -380,12 +400,12 @@ struct KeyCell: View {
 
     private var standardRegistryContent: some View {
         ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 3) {
-                Spacer(minLength: 5)
+            VStack(spacing: physicalId == nil ? 3 : 1) {
+                Spacer(minLength: physicalId == nil ? 5 : 0)
                 primaryContent
                 if let explanation = key.explanation {
                     Text(explanation)
-                        .font(.system(size: height * 0.12, weight: .medium))
+                        .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .medium))
                         .foregroundStyle(Color(hex: "#bac2de"))
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
@@ -394,10 +414,10 @@ struct KeyCell: View {
                         .font(.system(size: height * 0.13, design: .monospaced))
                         .foregroundStyle(Color(hex: "#585b70"))
                 }
-                Spacer(minLength: 5)
+                Spacer(minLength: physicalId == nil ? 5 : 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 4)
+            .padding(.horizontal, physicalId == nil ? 4 : 1)
 
             if let modifier = key.holdModifier,
                let glyph = KeyboardVisualSemantics.modifierGlyph(modifier)
@@ -529,7 +549,9 @@ struct KeyCell: View {
                 let scale = KeyboardVisualSemantics.glyphScale(primary.token)
                 Text(primary.token)
                     .font(.system(
-                        size: height * (scale == .single ? 0.38 : 0.28),
+                        size: physicalId == nil
+                            ? height * (scale == .single ? 0.38 : 0.28)
+                            : max(8, height * (scale == .single ? 0.38 : 0.28)),
                         weight: .semibold,
                         design: .monospaced
                     ))
@@ -539,7 +561,7 @@ struct KeyCell: View {
             } else {
                 RegistryIcon(
                     icon: RegistryKeyIcon(kind: primary.kind, token: primary.token),
-                    size: height * 0.34
+                    size: physicalId == nil ? height * 0.34 : max(8, height * 0.34)
                 )
                 .foregroundStyle(color)
             }

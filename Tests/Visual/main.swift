@@ -16,7 +16,7 @@ private enum VisualRendererError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .usage:
-            return "Usage: render-contact-sheets --registry PATH --output DIRECTORY"
+            return "Usage: render-contact-sheets --registry PATH --output DIRECTORY [--width-percent 1...100]"
         case .missingKeyboardGeometry:
             return "Registry has no keyboard geometry profiles"
         case .unexpectedLayerCount(let count):
@@ -65,10 +65,20 @@ private struct VisualRenderer {
     @MainActor
     static func main() throws {
         let arguments = Array(CommandLine.arguments.dropFirst())
-        guard arguments.count == 4,
+        guard [4, 6].contains(arguments.count),
               arguments[0] == "--registry",
               arguments[2] == "--output"
         else { throw VisualRendererError.usage }
+
+        let widthPercent: Int
+        if arguments.count == 6 {
+            guard arguments[4] == "--width-percent",
+                  let value = Int(arguments[5]), (1...100).contains(value)
+            else { throw VisualRendererError.usage }
+            widthPercent = value
+        } else {
+            widthPercent = 75
+        }
 
         let registryURL = URL(fileURLWithPath: arguments[1]).standardizedFileURL
         let outputURL = URL(fileURLWithPath: arguments[3]).standardizedFileURL
@@ -94,7 +104,7 @@ private struct VisualRenderer {
         _ = NSApplication.shared.setActivationPolicy(.prohibited)
         try validateYabaiSymbols(keyboardLayers.layers["yabai"])
 
-        let display = Config.Display(width_percent: 75)
+        let display = Config.Display(width_percent: widthPercent)
         var imageRecords: [RenderedImage] = []
         for profile in profiles {
             let profileURL = outputURL.appendingPathComponent(

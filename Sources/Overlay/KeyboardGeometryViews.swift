@@ -253,7 +253,21 @@ struct DefyGeometryView: View {
     ) -> some View {
         VStack(spacing: metrics.keySize * 0.2) {
             mainBody(half, side: side)
-            thumbCluster(half.thumbs, side: side)
+            if DefyThumbGeometry.isIdentified(left: left.thumbs, right: right.thumbs) {
+                DefyThumbFan(
+                    thumbs: half.thumbs,
+                    side: side,
+                    source: source,
+                    keySize: metrics.keySize,
+                    showInputPath: showInputPath
+                )
+                .frame(
+                    width: metrics.keySize * 7 + metrics.spacing * 6,
+                    alignment: side == .left ? .trailing : .leading
+                )
+            } else {
+                thumbCluster(half.thumbs, side: side)
+            }
         }
     }
 
@@ -364,6 +378,80 @@ struct DefyGeometryView: View {
 
 
 @available(macOS 14, *)
+private struct DefyThumbFan: View {
+    let thumbs: KeyboardPresentedDefyThumbRows
+    let side: KeyboardHalfSide
+    let source: KeyboardPresentationSource
+    let keySize: CGFloat
+    let showInputPath: Bool
+
+    var body: some View {
+        let geometry = DefyThumbGeometry(side: side, keySize: keySize)
+        let slots = (thumbs.top + thumbs.bottom).compactMap { $0 }
+        ZStack(alignment: .topLeading) {
+            ForEach(geometry.keys) { key in
+                if let slot = slots.first(where: { $0.physicalId == key.id }) {
+                    thumb(key, slot: slot)
+                }
+            }
+        }
+        .frame(width: geometry.size.width, height: geometry.size.height)
+    }
+
+    @ViewBuilder
+    private func thumb(_ geometry: DefyThumbKeyGeometry, slot: KeyboardPresentedDefySlot) -> some View {
+        let rect = geometry.content
+        switch DefySlotRenderKind(slot: slot, showInputPath: showInputPath) {
+        case .key(let key):
+            let cell = KeyCell(
+                key: key, source: source, width: rect.width, height: rect.height,
+                physicalId: geometry.id
+            )
+            geometry.path.fill(cell.fillColor)
+            geometry.path.stroke(cell.strokeColor, lineWidth: 1)
+            cell.content.position(x: rect.midX, y: rect.midY)
+                .accessibilityElement(children: .combine)
+        case .inputPath(let slot):
+            let labelHeight = max(8, keySize * 0.13)
+            let cell = KeyboardInputPathCell(
+                slot: slot, width: rect.width, height: rect.height - labelHeight
+            )
+            geometry.path.fill(cell.fillColor)
+            geometry.path.stroke(cell.strokeColor, lineWidth: 1)
+            VStack(spacing: 0) {
+                physicalLabel(geometry.id, height: labelHeight)
+                cell.content
+            }
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+        case .quiet(let label):
+            let labelHeight = max(8, keySize * 0.13)
+            let cell = QuietKeyShell(label: label, width: rect.width, height: rect.height - labelHeight)
+            geometry.path.fill(cell.fillColor)
+            geometry.path.stroke(cell.strokeColor, lineWidth: 1)
+            VStack(spacing: 0) {
+                physicalLabel(geometry.id, height: labelHeight)
+                cell.content
+            }
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+        case .vacancy:
+            EmptyView()
+        }
+    }
+
+    private func physicalLabel(_ id: String, height: CGFloat) -> some View {
+        Text(id)
+            .font(.system(size: max(7, height * 0.85), weight: .semibold, design: .monospaced))
+            .foregroundStyle(Color(hex: "#a6adc8"))
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .frame(height: height)
+    }
+}
+
+
+@available(macOS 14, *)
 struct KeyboardInputPathCell: View {
     private static let minimumScaleFactor = 0.42
 
@@ -388,7 +476,16 @@ struct KeyboardInputPathCell: View {
         .joined(separator: ", ")
     }
 
+    var fillColor: Color { Color(hex: "#313244").opacity(0.34) }
+    var strokeColor: Color { Color(hex: "#cba6f7").opacity(0.16) }
+
     var body: some View {
+        content
+            .background(RoundedRectangle(cornerRadius: 6).fill(fillColor))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(strokeColor, lineWidth: 1))
+    }
+
+    var content: some View {
         VStack(spacing: 1) {
             Text(labels.firmware)
                 .font(.system(
@@ -440,14 +537,6 @@ struct KeyboardInputPathCell: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(3)
         .frame(width: width, height: height)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color(hex: "#313244").opacity(0.34))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Color(hex: "#cba6f7").opacity(0.16), lineWidth: 1)
-        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
     }
@@ -460,22 +549,25 @@ private struct QuietKeyShell: View {
     let width: CGFloat
     let height: CGFloat
 
+    var fillColor: Color { Color(hex: "#313244").opacity(0.22) }
+    var strokeColor: Color { Color(hex: "#cdd6f4").opacity(0.045) }
+
     var body: some View {
         RoundedRectangle(cornerRadius: 6)
-            .fill(Color(hex: "#313244").opacity(0.22))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color(hex: "#cdd6f4").opacity(0.045), lineWidth: 1)
-            )
-            .overlay(
-                Text(label)
-                    .font(.system(size: height * 0.18, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#cdd6f4").opacity(0.78))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.55)
-                    .multilineTextAlignment(.center)
-                    .padding(4)
-            )
+            .fill(fillColor)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(strokeColor, lineWidth: 1))
+            .overlay(content)
+            .frame(width: width, height: height)
+    }
+
+    var content: some View {
+        Text(label)
+            .font(.system(size: height * 0.18, weight: .semibold))
+            .foregroundStyle(Color(hex: "#cdd6f4").opacity(0.78))
+            .lineLimit(2)
+            .minimumScaleFactor(0.55)
+            .multilineTextAlignment(.center)
+            .padding(4)
             .frame(width: width, height: height)
     }
 }
