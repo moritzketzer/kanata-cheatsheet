@@ -149,6 +149,10 @@ final class OverlayLogic {
                 }
                 return .none
             }
+            if layer == "yabai", isVisible, visibleLayer == layer {
+                pendingLayer = nil
+                return .none
+            }
             if isVisible, sharesOverlayGroup(visibleLayer, layer) {
                 pendingLayer = nil
                 visibleLayer = layer
@@ -396,6 +400,14 @@ final class OverlayController {
             executeAction(action, refitRefresh: false)
         } else {
             executeAction(action)
+            if wasSamplingYabaiModifiers,
+               !logic.samplesYabaiModifiers,
+               logic.isVisible,
+               logic.visibleLayer == "yabai",
+               case .startDelay = action
+            {
+                refreshOverlay(refit: false)
+            }
         }
     }
 

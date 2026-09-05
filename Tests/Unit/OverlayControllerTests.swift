@@ -255,6 +255,111 @@ struct OverlayControllerTests {
         controller.handleMessage("cheatsheet-hide")
     }
 
+    @Test("delayed layer exit immediately reconciles visible Yabai")
+    @MainActor
+    func delayedLayerExitImmediatelyReconcilesVisibleYabai() throws {
+        let display = Config.Display(
+            delay_ms: 30,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(yabaiRegistry(
+                trigger: "delay",
+                includeApps: true
+            )),
+            modifierFlags: { 0x20 }
+        )
+        controller.handleConnectionChange(true)
+        controller.handleLayerChange("yabai")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
+
+        let panel = try #require(
+            NSApplication.shared.windows
+                .compactMap { $0 as? OverlayPanel }
+                .last { $0.isVisible }
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let frame = panel.frame
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .option)
+        #expect(host.rootView.yabaiQualifier == nil)
+
+        controller.handleLayerChange("apps")
+
+        #expect(panel.contentView === host)
+        #expect(panel.frame == frame)
+        #expect(host.rootView.presentation.name == "yabai")
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == nil)
+        #expect(host.rootView.yabaiQualifier == "Preview")
+        #expect(!controller.isModifierTimerRunning)
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
+        let replacement = try #require(
+            NSApplication.shared.windows
+                .compactMap { $0 as? OverlayPanel }
+                .last { $0.isVisible }
+        )
+        let replacementHost = try #require(
+            replacement.contentView as? NSHostingView<KeyboardView>
+        )
+        #expect(replacementHost.rootView.presentation.name == "apps")
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("fresh delayed Yabai notification samples without a duplicate show")
+    @MainActor
+    func freshDelayedYabaiNotificationSamplesWithoutDuplicateShow() throws {
+        var flags: UInt = 0
+        let display = Config.Display(
+            delay_ms: 30,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(yabaiRegistry(trigger: "delay")),
+            modifierFlags: { flags }
+        )
+        controller.handleConnectionChange(true)
+        controller.handleLayerChange("yabai")
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
+
+        let panel = try #require(
+            NSApplication.shared.windows
+                .compactMap { $0 as? OverlayPanel }
+                .last { $0.isVisible }
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let frame = panel.frame
+
+        controller.handleConnectionChange(false)
+        controller.handleConnectionChange(true)
+        flags = 0x8
+        controller.handleLayerChange("yabai")
+
+        #expect(panel.contentView === host)
+        #expect(panel.frame == frame)
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .command)
+        #expect(host.rootView.yabaiQualifier == nil)
+        #expect(controller.isModifierTimerRunning)
+
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
+        let stillVisible = try #require(
+            NSApplication.shared.windows
+                .compactMap { $0 as? OverlayPanel }
+                .last { $0.isVisible }
+        )
+        #expect(stillVisible === panel)
+        #expect(stillVisible.contentView === host)
+        #expect(stillVisible.frame == frame)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
     @Test("Yabai fitting size is invariant across modifier states")
     @MainActor
     func YabaiModifierStatesKeepFittingSize() {
@@ -1354,7 +1459,10 @@ struct OverlayControllerTests {
         return logic
     }
 
-    private func yabaiRegistry() -> KeybindingRegistry {
+    private func yabaiRegistry(
+        trigger: String = "manual",
+        includeApps: Bool = false
+    ) -> KeybindingRegistry {
         let position = RegistryKeyboardPosition(
             position: "KeyU",
             sourceKey: "u",
@@ -1394,6 +1502,33 @@ struct OverlayControllerTests {
             icon: RegistryKeyIcon(kind: "sf-symbol", token: "window.ceiling"),
             presentation: presentation
         )
+        var layers = [
+            "yabai": RegistryKeyboardLayer(
+                id: "yabai",
+                label: "Yabai",
+                trigger: trigger,
+                overlayGroup: nil,
+                showBaseKeys: true,
+                groups: [
+                    RegistryKeyboardGroup(
+                        id: "windows",
+                        color: "#cba6f7"
+                    ),
+                ],
+                cells: ["KeyU": cell]
+            ),
+        ]
+        if includeApps {
+            layers["apps"] = RegistryKeyboardLayer(
+                id: "apps",
+                label: "Apps",
+                trigger: "delay",
+                overlayGroup: nil,
+                showBaseKeys: true,
+                groups: [],
+                cells: [:]
+            )
+        }
         return KeybindingRegistry(
             schemaVersion: 2,
             providers: [],
@@ -1417,22 +1552,7 @@ struct OverlayControllerTests {
                         layoutId: "mine-iso",
                         rows: [[position]]
                     ),
-                    layers: [
-                        "yabai": RegistryKeyboardLayer(
-                            id: "yabai",
-                            label: "Yabai",
-                            trigger: "manual",
-                            overlayGroup: nil,
-                            showBaseKeys: true,
-                            groups: [
-                                RegistryKeyboardGroup(
-                                    id: "windows",
-                                    color: "#cba6f7"
-                                ),
-                            ],
-                            cells: ["KeyU": cell]
-                        ),
-                    ]
+                    layers: layers
                 )
             )
         )
