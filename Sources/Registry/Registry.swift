@@ -388,8 +388,28 @@ struct RegistryKeyVisual: Codable, Hashable {
 }
 
 
+struct RegistryModifierVariant: Codable, Hashable {
+    let modifier: YabaiModifier
+    let primary: RegistryKeyVisual
+    let explanation: String
+}
+
+
 struct RegistryKeyPresentation: Codable, Hashable {
     let primary: RegistryKeyVisual
     let holdModifier: String?
     let explanation: String?
+    let modifierVariants: [RegistryModifierVariant]?
+
+    init(
+        primary: RegistryKeyVisual,
+        holdModifier: String?,
+        explanation: String?,
+        modifierVariants: [RegistryModifierVariant]? = nil
+    ) {
+        self.primary = primary
+        self.holdModifier = holdModifier
+        self.explanation = explanation
+        self.modifierVariants = modifierVariants
+    }
 }

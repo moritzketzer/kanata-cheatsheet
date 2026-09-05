@@ -75,7 +75,8 @@ private func deviceLocalDefySlot(_ firmwareKey: String) -> [String: Any] {
 private func versionTwoFixtureData(
     includeFooter: Bool = true,
     includeIconlessCell: Bool = false,
-    includeGeometryProfiles: Bool = false
+    includeGeometryProfiles: Bool = false,
+    includeModifierVariants: Bool = false
 ) throws -> Data {
     let slots: [[String: Any]] = (1...15).map { index in
         [
@@ -88,6 +89,120 @@ private func versionTwoFixtureData(
     let optionalFinderIcon: Any = includeIconlessCell
         ? NSNull()
         : ["kind": "app-font", "token": ":finder:"]
+    var yabaiCells: [String: Any] = [
+        "F1": registryCell(
+            "function-1", "F1", "F1", "f1", "passthrough", "keyboard",
+            iconKind: "sf-symbol"
+        ),
+    ]
+    if includeModifierVariants {
+        let cell = {
+            (
+                position: String,
+                label: String,
+                displayKey: String,
+                holdModifier: String?,
+                variants: [[String: Any]]
+            ) -> [String: Any] in
+            var presentation: [String: Any] = [
+                "primary": ["kind": "sf-symbol", "token": "window.ceiling"],
+                "explanation": label,
+                "modifierVariants": variants,
+            ]
+            if let holdModifier {
+                presentation["holdModifier"] = holdModifier
+            }
+            return [
+                "bindingId": "test.\(position)",
+                "displayKey": displayKey,
+                "sourceKey": displayKey.lowercased(),
+                "actionLabel": "Full \(label)",
+                "group": "windows",
+                "icon": ["kind": "sf-symbol", "token": "window.ceiling"],
+                "presentation": presentation,
+            ]
+        }
+        let variant = {
+            (modifier: String, token: String, explanation: String) -> [String: Any] in
+            [
+                "modifier": modifier,
+                "primary": ["kind": "sf-symbol", "token": token],
+                "explanation": explanation,
+            ]
+        }
+        yabaiCells.merge([
+            "KeyU": cell(
+                "KeyU", "Next window", "U", nil,
+                [
+                    variant("control", "arrow.up.and.down.square", "Resize north"),
+                    variant("option", "square.stack.3d.up", "Stack next"),
+                    variant("command", "arrow.up.to.line.square", "Warp north"),
+                    variant("shift", "arrow.up.arrow.down.square", "Swap north"),
+                ]
+            ),
+            "KeyI": cell(
+                "KeyI", "Previous window", "I", "shift",
+                [
+                    variant("control", "arrow.up.and.down.square.fill", "Resize south"),
+                    variant("option", "square.stack.3d.down.right", "Stack previous"),
+                    variant("command", "arrow.down.to.line.square", "Warp south"),
+                    variant("shift", "arrow.down.arrow.up.square", "Swap south"),
+                ]
+            ),
+            "KeyR": cell(
+                "KeyR", "Previous Space", "R", "option",
+                [
+                    variant("control", "arrow.left.and.right.square", "Resize west"),
+                    variant("option", "arrow.left.square", "Focus window west"),
+                    variant("command", "rectangle.portrait.and.arrow.right", "Move previous + follow"),
+                    variant("shift", "rectangle.portrait.and.arrow.left", "Move previous Space"),
+                ]
+            ),
+            "KeyE": cell(
+                "KeyE", "Next Space", "E", "command",
+                [
+                    variant("control", "arrow.left.and.right.square.fill", "Resize east"),
+                    variant("option", "arrow.right.square", "Focus window east"),
+                    variant("command", "rectangle.portrait.and.arrow.forward", "Move next + follow"),
+                    variant("shift", "rectangle.portrait.and.arrow.forward.fill", "Move next Space"),
+                ]
+            ),
+            "KeyC": cell(
+                "KeyC", "Previous display", "C", "control",
+                [
+                    variant("command", "display.and.arrow.down", "Move display + follow"),
+                    variant("shift", "display.and.arrow.down.fill", "Move previous display"),
+                ]
+            ),
+            "KeyO": cell(
+                "KeyO", "Next display", "O", nil,
+                [
+                    variant("command", "display.and.arrow.up", "Move display + follow"),
+                    variant("shift", "display.and.arrow.up.fill", "Move next display"),
+                ]
+            ),
+            "Digit1": cell(
+                "Digit1", "Space 1", "1", nil,
+                [
+                    variant("command", "1.square.fill", "Move to 1 + follow"),
+                    variant("shift", "1.square", "Move to Space 1"),
+                ]
+            ),
+            "Tab": cell(
+                "Tab", "Remove scratch", "Tab", nil,
+                [
+                    variant("shift", "rectangle.stack.badge.minus", "Previous scratch"),
+                    variant("command", "rectangle.stack.badge.plus", "Next scratch"),
+                ]
+            ),
+            "KeyZ": cell(
+                "KeyZ", "Zoom fullscreen", "Z", nil,
+                [variant("shift", "arrow.up.left.and.arrow.down.right", "Zoom parent")]
+            ),
+            "KeyL": cell("KeyL", "Layout", "L", nil, []),
+            "KeyA": cell("KeyA", "Sticky", "A", nil, []),
+        ]) { _, new in new }
+    }
     var yabaiLayer: [String: Any] = [
         "id": "yabai",
         "label": "Yabai",
@@ -97,12 +212,7 @@ private func versionTwoFixtureData(
             ["id": "passthrough", "color": "#6c7086"],
             ["id": "windows", "color": "#cba6f7"],
         ],
-        "cells": [
-            "F1": registryCell(
-                "function-1", "F1", "F1", "f1", "passthrough", "keyboard",
-                iconKind: "sf-symbol"
-            ),
-        ],
+        "cells": yabaiCells,
     ]
     if includeFooter {
         yabaiLayer["footer"] = [
@@ -123,7 +233,7 @@ private func versionTwoFixtureData(
         "mineHoldModifier": "control",
         "width": 1.0,
     ]
-    let keyboardRow: [[String: Any]] = [
+    var keyboardRow: [[String: Any]] = [
         [
             "position": "KeyW",
             "sourceKey": "w",
@@ -180,6 +290,18 @@ private func versionTwoFixtureData(
         namedKeyboardPosition("ArrowDown", "down", "Down"),
         namedKeyboardPosition("ArrowRight", "rght", "Right"),
     ]
+    if includeModifierVariants {
+        keyboardRow.append(contentsOf: [
+            ["position": "KeyU", "sourceKey": "u", "mineKey": "U", "width": 1.0],
+            ["position": "KeyI", "sourceKey": "i", "mineKey": "I", "width": 1.0],
+            ["position": "KeyR", "sourceKey": "r", "mineKey": "R", "width": 1.0],
+            ["position": "KeyE", "sourceKey": "e", "mineKey": "E", "width": 1.0],
+            ["position": "KeyC", "sourceKey": "c", "mineKey": "C", "width": 1.0],
+            ["position": "Digit1", "sourceKey": "1", "mineKey": "1", "width": 1.0],
+            ["position": "Tab", "sourceKey": "tab", "namedKey": "Tab", "width": 1.5],
+            ["position": "KeyA", "sourceKey": "a", "mineKey": "A", "width": 1.0],
+        ])
+    }
     let arrowCluster: [String: Any] = [
         "up": namedKeyboardPosition("ArrowUp", "up", "Up"),
         "left": namedKeyboardPosition("ArrowLeft", "left", "Left"),
@@ -507,6 +629,151 @@ private func versionTwoFixtureData(
 
 @Suite("Keybinding Registry")
 struct RegistryTests {
+    @Test("schema two presentation variants remain optional")
+    func modifierVariantsRemainBackwardCompatible() throws {
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
+
+        #expect(
+            registry.views.keyboardLayers?.layers["mine"]?
+                .cells["KeyD"]?.presentation?.modifierVariants == nil
+        )
+    }
+
+    @Test("decodes ordered Yabai modifier variants")
+    func decodesOrderedYabaiModifierVariants() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionTwoFixtureData(includeModifierVariants: true)
+        )
+        let variants = try #require(
+            registry.views.keyboardLayers?.layers["yabai"]?
+                .cells["KeyU"]?.presentation?.modifierVariants
+        )
+
+        #expect(variants.map(\.modifier) == [.control, .option, .command, .shift])
+        #expect(
+            variants[1]
+                == RegistryModifierVariant(
+                    modifier: .option,
+                    primary: RegistryKeyVisual(
+                        kind: "sf-symbol",
+                        token: "square.stack.3d.up"
+                    ),
+                    explanation: "Stack next"
+                )
+        )
+    }
+
+    @Test("Yabai projection selects the first matching variant per action row")
+    func projectsFirstMatchingYabaiVariantPerRow() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionTwoFixtureData(includeModifierVariants: true)
+        )
+
+        let all = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "yabai",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                activeModifiers: Set(YabaiModifier.allCases)
+            )
+        )
+        let expected: [String: (YabaiModifier, String)] = [
+            "KeyU": (.control, "Resize north"),
+            "KeyI": (.control, "Resize south"),
+            "KeyR": (.control, "Resize west"),
+            "KeyE": (.control, "Resize east"),
+            "KeyC": (.command, "Move display + follow"),
+            "KeyO": (.command, "Move display + follow"),
+            "Digit1": (.command, "Move to 1 + follow"),
+            "Tab": (.shift, "Previous scratch"),
+            "KeyZ": (.shift, "Zoom parent"),
+        ]
+
+        for (position, result) in expected {
+            let key = try #require(all.key(at: position))
+            #expect(key.actionModifier == result.0, "position=\(position)")
+            #expect(key.explanation == result.1, "position=\(position)")
+            #expect(key.colorHex == result.0.accentHex, "position=\(position)")
+        }
+    }
+
+    @Test("Yabai resolves Command plus Shift by each cell's ordered predicates")
+    func projectsCommandShiftPerCellPriority() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionTwoFixtureData(includeModifierVariants: true)
+        )
+        let projected = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "yabai",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                activeModifiers: [.command, .shift]
+            )
+        )
+        let nextWindow = try #require(projected.key(at: "KeyU"))
+        let scratch = try #require(projected.key(at: "Tab"))
+        let shiftHold = try #require(projected.key(at: "KeyI"))
+
+        #expect(nextWindow.actionModifier == .command)
+        #expect(nextWindow.explanation == "Warp north")
+        #expect(scratch.actionModifier == .shift)
+        #expect(scratch.explanation == "Previous scratch")
+        #expect(shiftHold.actionModifier == .command)
+        #expect(shiftHold.holdModifier == "shift")
+        #expect(shiftHold.holdAccentHex == YabaiModifier.shift.accentHex)
+        #expect(shiftHold.isHoldActive)
+        #expect(shiftHold.badge == "I")
+        #expect(shiftHold.actionLabel == "Full Previous window")
+    }
+
+    @Test("Yabai leaves unaffected cells and non-Yabai layers unchanged")
+    func modifierProjectionIsYabaiOnly() throws {
+        let registry = try KeybindingRegistry.parse(
+            from: versionTwoFixtureData(includeModifierVariants: true)
+        )
+        let baseYabai = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "yabai",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let modifiedYabai = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "yabai",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                activeModifiers: [.command, .shift]
+            )
+        )
+        for position in ["KeyL", "KeyA"] {
+            #expect(baseYabai.key(at: position) == modifiedYabai.key(at: position))
+        }
+
+        let baseMine = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false
+            )
+        )
+        let modifiedMine = try #require(
+            KeyboardLayerProjector.presentation(
+                layerName: "mine",
+                legacyLayer: nil,
+                registry: registry,
+                showFree: false,
+                activeModifiers: Set(YabaiModifier.allCases)
+            )
+        )
+        #expect(baseMine == modifiedMine)
+    }
+
     @Test("decodes and projects explicit tap hold and explanation roles")
     func projectsExplicitPresentationRoles() throws {
         let literal = RegistryKeyVisual(kind: "glyph", token: "1")

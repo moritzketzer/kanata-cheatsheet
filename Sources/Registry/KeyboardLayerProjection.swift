@@ -17,8 +17,43 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
     let primary: RegistryKeyVisual?
     let holdModifier: String?
     let explanation: String?
+    let actionModifier: YabaiModifier?
+    let holdAccentHex: String?
+    let isHoldActive: Bool
     var keyLabel: String? = nil
     var slotID: String? = nil
+
+    init(
+        id: String,
+        width: Double,
+        badge: String?,
+        actionLabel: String?,
+        freeLabel: String?,
+        colorHex: String?,
+        primary: RegistryKeyVisual?,
+        holdModifier: String?,
+        explanation: String?,
+        actionModifier: YabaiModifier? = nil,
+        holdAccentHex: String? = nil,
+        isHoldActive: Bool = false,
+        keyLabel: String? = nil,
+        slotID: String? = nil
+    ) {
+        self.id = id
+        self.width = width
+        self.badge = badge
+        self.actionLabel = actionLabel
+        self.freeLabel = freeLabel
+        self.colorHex = colorHex
+        self.primary = primary
+        self.holdModifier = holdModifier
+        self.explanation = explanation
+        self.actionModifier = actionModifier
+        self.holdAccentHex = holdAccentHex
+        self.isHoldActive = isHoldActive
+        self.keyLabel = keyLabel
+        self.slotID = slotID
+    }
 
     var viewID: String { slotID ?? id }
 
@@ -31,6 +66,9 @@ struct KeyboardPresentedKey: Equatable, Identifiable {
             && lhs.primary == rhs.primary
             && lhs.holdModifier == rhs.holdModifier
             && lhs.explanation == rhs.explanation
+            && lhs.actionModifier == rhs.actionModifier
+            && lhs.holdAccentHex == rhs.holdAccentHex
+            && lhs.isHoldActive == rhs.isHoldActive
             && lhs.keyLabel == rhs.keyLabel
     }
 }
@@ -268,7 +306,8 @@ enum KeyboardLayerProjector {
         legacyLayer: Config.Layer?,
         registry: KeybindingRegistry?,
         showFree: Bool,
-        geometryProfileId: String? = nil
+        geometryProfileId: String? = nil,
+        activeModifiers: Set<YabaiModifier> = []
     ) -> KeyboardLayerPresentation? {
         if let keyboardLayers = registry?.views.keyboardLayers,
            let geometry = keyboardLayers.geometry,
@@ -301,31 +340,49 @@ enum KeyboardLayerProjector {
                 let primary: RegistryKeyVisual?
                 let holdModifier: String?
                 let explanation: String?
+                let actionModifier: YabaiModifier?
                 if isPassthrough {
                     primary = nil
                     holdModifier = nil
                     explanation = nil
+                    actionModifier = nil
                 } else if let presentation = cell?.presentation {
-                    primary = presentation.primary
+                    let variant = layerName == "yabai"
+                        ? presentation.modifierVariants?.first {
+                            activeModifiers.contains($0.modifier)
+                        }
+                        : nil
+                    primary = variant?.primary ?? presentation.primary
                     holdModifier = presentation.holdModifier
-                    explanation = presentation.explanation
+                    explanation = variant?.explanation ?? presentation.explanation
+                    actionModifier = variant?.modifier
                 } else {
                     primary = cell?.icon.map {
                         RegistryKeyVisual(kind: $0.kind, token: $0.token)
                     }
                     holdModifier = nil
                     explanation = cell?.actionLabel
+                    actionModifier = nil
                 }
+                let holdRole = layerName == "yabai"
+                    ? holdModifier.flatMap(YabaiModifier.init(rawValue:))
+                    : nil
                 return KeyboardPresentedKey(
                     id: position.position,
                     width: position.width,
                     badge: sourceBadge,
                     actionLabel: isPassthrough ? nil : cell?.actionLabel,
                     freeLabel: freeMineKey == nil ? nil : "Free",
-                    colorHex: isPassthrough ? nil : cell.flatMap { groupColors[$0.group] },
+                    colorHex: isPassthrough
+                        ? nil
+                        : actionModifier?.accentHex
+                            ?? cell.flatMap { groupColors[$0.group] },
                     primary: primary,
                     holdModifier: holdModifier,
                     explanation: explanation,
+                    actionModifier: actionModifier,
+                    holdAccentHex: holdRole?.accentHex,
+                    isHoldActive: holdRole.map(activeModifiers.contains) ?? false,
                     keyLabel: nil,
                     slotID: slotID
                 )
