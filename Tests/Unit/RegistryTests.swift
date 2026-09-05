@@ -76,7 +76,8 @@ private func versionTwoFixtureData(
     includeFooter: Bool = true,
     includeIconlessCell: Bool = false,
     includeGeometryProfiles: Bool = false,
-    includeModifierVariants: Bool = false
+    includeModifierVariants: Bool = false,
+    includePhysicalIds: Bool = false
 ) throws -> Data {
     let slots: [[String: Any]] = (1...15).map { index in
         [
@@ -339,16 +340,26 @@ private func versionTwoFixtureData(
             ],
         ],
     ]
-    let wrapDefyThumbSide = { (rawSide: Any) -> [String: Any] in
+    let wrapDefyThumbSide = { (rawSide: Any, prefix: String) -> [String: Any] in
         let side = rawSide as! [String: [[String: Any]]]
+        func wrap(_ row: String, start: Int) -> [[String: Any]] {
+            side[row]!.enumerated().map { index, position in
+                var slot = defySlot(position)
+                if includePhysicalIds {
+                    let number = start + (prefix == "L" ? index : 3 - index)
+                    slot["physicalId"] = "\(prefix)T\(number)"
+                }
+                return slot
+            }
+        }
         return [
-            "top": side["top"]!.map { defySlot($0) },
-            "bottom": side["bottom"]!.map { defySlot($0) },
+            "top": wrap("top", start: 1),
+            "bottom": wrap("bottom", start: 5),
         ]
     }
     let defyProfileThumbs: [String: Any] = [
-        "left": wrapDefyThumbSide(defyThumbs["left"]!),
-        "right": wrapDefyThumbSide(defyThumbs["right"]!),
+        "left": wrapDefyThumbSide(defyThumbs["left"]!, "L"),
+        "right": wrapDefyThumbSide(defyThumbs["right"]!, "R"),
     ]
     var geometry: [String: Any] = [
         "layoutId": "mine-iso",
@@ -1241,6 +1252,37 @@ struct RegistryTests {
         #expect(thumbs.leftTop[1].badge == "F14")
         #expect(thumbs.leftTop[1].actionLabel == "Space / Apps")
         #expect(mine.key(at: "F14") == thumbs.leftTop[1])
+    }
+
+    @Test("decodes physical identity independently of its carrier")
+    func decodesPhysicalId() throws {
+        let data = Data(#"{"firmwareKey":"F14","position":null,"physicalId":"LT1"}"#.utf8)
+        let slot = try JSONDecoder().decode(RegistryDefySlot.self, from: data)
+        #expect(slot.physicalId == "LT1")
+        let oldData = Data(#"{"firmwareKey":"F14","position":null}"#.utf8)
+        let oldSlot = try JSONDecoder().decode(RegistryDefySlot.self, from: oldData)
+        #expect(oldSlot.physicalId == nil)
+    }
+
+    @Test("projects all sixteen physical IDs and preserves older registries", arguments: [false, true])
+    func projectsPhysicalIds(_ identified: Bool) throws {
+        let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData(
+            includeGeometryProfiles: true,
+            includePhysicalIds: identified
+        ))
+        let presentation = try #require(KeyboardLayerProjector.presentation(
+            layerName: "mine", legacyLayer: nil, registry: registry,
+            showFree: false, geometryProfileId: "defy"
+        ))
+        guard case .defy(let left, let right) = presentation.geometry else {
+            Issue.record("Expected Defy geometry")
+            return
+        }
+        let slots = left.thumbs.top + left.thumbs.bottom + right.thumbs.top + right.thumbs.bottom
+        let expected = ["LT1", "LT2", "LT3", "LT4", "LT5", "LT6", "LT7", "LT8",
+                        "RT4", "RT3", "RT2", "RT1", "RT8", "RT7", "RT6", "RT5"]
+        #expect(slots.map { $0?.physicalId } == (identified ? expected : Array(repeating: nil, count: 16)))
+        #expect(left.thumbs.top[1]?.key?.actionLabel == "Space / Apps")
     }
 
     @Test("search covers gesture action context tags and source")

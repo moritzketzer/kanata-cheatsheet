@@ -281,6 +281,7 @@ struct RegistryDefyHalves: Codable, Hashable {
 struct RegistryDefySlot: Codable, Hashable {
     let firmwareKey: String
     let position: RegistryKeyboardPosition?
+    var physicalId: String? = nil
 }
 
 
