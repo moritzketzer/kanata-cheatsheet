@@ -343,8 +343,8 @@ struct DefyGeometryView: View {
             Color.clear
                 .frame(width: width, height: height)
                 .accessibilityHidden(true)
-        case .quiet:
-            QuietKeyShell(width: width, height: height)
+        case .quiet(let firmwareKey):
+            QuietKeyShell(label: firmwareKey, width: width, height: height)
         case .key(let key):
             KeyCell(
                 key: key,
@@ -456,6 +456,7 @@ struct KeyboardInputPathCell: View {
 
 @available(macOS 14, *)
 private struct QuietKeyShell: View {
+    let label: String
     let width: CGFloat
     let height: CGFloat
 
@@ -465,6 +466,15 @@ private struct QuietKeyShell: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color(hex: "#cdd6f4").opacity(0.045), lineWidth: 1)
+            )
+            .overlay(
+                Text(label)
+                    .font(.system(size: height * 0.18, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#cdd6f4").opacity(0.78))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.55)
+                    .multilineTextAlignment(.center)
+                    .padding(4)
             )
             .frame(width: width, height: height)
     }
