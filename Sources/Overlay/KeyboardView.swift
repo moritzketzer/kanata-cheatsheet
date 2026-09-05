@@ -33,6 +33,19 @@ extension Color {
 }
 
 
+private struct YabaiLayerEnvironmentKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+
+private extension EnvironmentValues {
+    var isYabaiLayer: Bool {
+        get { self[YabaiLayerEnvironmentKey.self] }
+        set { self[YabaiLayerEnvironmentKey.self] = newValue }
+    }
+}
+
+
 @available(macOS 14, *)
 struct KeyboardView: View {
     let presentation: KeyboardLayerPresentation
@@ -40,6 +53,8 @@ struct KeyboardView: View {
     let registry: KeybindingRegistry?
     let showFreeModifierSpace: Bool
     let showInputPath: Bool
+    let activeModifiers: Set<YabaiModifier>
+    let yabaiQualifier: String?
 
     let keySize: CGFloat
     let contentWidth: CGFloat
@@ -52,14 +67,17 @@ struct KeyboardView: View {
         registry: KeybindingRegistry? = nil,
         showFreeModifierSpace: Bool = false,
         geometryProfileId: String? = nil,
-        showInputPath: Bool = false
+        showInputPath: Bool = false,
+        activeModifiers: Set<YabaiModifier> = [],
+        yabaiQualifier: String? = nil
     ) {
         let presentation = KeyboardLayerProjector.presentation(
             layerName: layerName,
             legacyLayer: legacyLayer,
             registry: registry,
             showFree: showFreeModifierSpace,
-            geometryProfileId: geometryProfileId
+            geometryProfileId: geometryProfileId,
+            activeModifiers: activeModifiers
         ) ?? KeyboardLayerPresentation(
             name: layerName,
             label: layerName,
@@ -107,21 +125,42 @@ struct KeyboardView: View {
         self.registry = registry
         self.showFreeModifierSpace = showFreeModifierSpace
         self.showInputPath = showInputPath
+        self.activeModifiers = activeModifiers
+        self.yabaiQualifier = yabaiQualifier
         self.keySize = max(28, calculatedKeySize)
         self.contentWidth = contentWidth
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(presentation.label)
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                .foregroundColor(Color(hex: "#cba6f7"))
-                .tracking(4)
-                .textCase(.uppercase)
+            if presentation.name == "yabai" {
+                VStack(spacing: 3) {
+                    Text(presentation.label)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(hex: "#cba6f7"))
+                        .tracking(4)
+                        .textCase(.uppercase)
+
+                    Text(yabaiQualifier ?? " ")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color(hex: "#6c7086"))
+                        .tracking(0.8)
+                        .frame(height: 11)
+                        .accessibilityHidden(yabaiQualifier == nil)
+                }
+            } else {
+                Text(presentation.label)
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "#cba6f7"))
+                    .tracking(4)
+                    .textCase(.uppercase)
+            }
 
             geometryContent
 
-            if presentation.hasHoldModifiers && !showInputPath {
+            if presentation.name == "yabai" && !showInputPath {
+                YabaiModifierLegend(activeModifiers: activeModifiers)
+            } else if presentation.hasHoldModifiers && !showInputPath {
                 Text("KEY ↖   TAP ●   HOLD ↘")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Color(hex: "#6c7086"))
@@ -175,6 +214,16 @@ struct KeyboardView: View {
             keySize: keySize,
             spacing: Self.keySpacing
         )
+        if presentation.name == "yabai" {
+            geometryView(metrics: metrics)
+                .environment(\.isYabaiLayer, true)
+        } else {
+            geometryView(metrics: metrics)
+        }
+    }
+
+    @ViewBuilder
+    private func geometryView(metrics: KeyboardGeometryMetrics) -> some View {
         switch presentation.geometry {
         case .macbook(let rows, let arrows):
             MacBookGeometryView(
@@ -207,11 +256,62 @@ struct KeyboardView: View {
 
 
 @available(macOS 14, *)
+private struct YabaiModifierLegend: View {
+    let activeModifiers: Set<YabaiModifier>
+
+    private let roles: [YabaiModifier] = [
+        .option, .shift, .command, .control,
+    ]
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text("HOLD")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color(hex: "#6c7086"))
+                .tracking(1)
+
+            ForEach(roles, id: \.self) { modifier in
+                let isActive = activeModifiers.contains(modifier)
+                HStack(spacing: 4) {
+                    Text(modifier.glyph)
+                        .font(.system(size: 11, weight: .bold))
+                    Text(modifier.roleLabel)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                }
+                .foregroundStyle(Color(hex: modifier.accentHex))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(
+                            isActive
+                                ? Color(hex: modifier.accentHex).opacity(0.22)
+                                : Color(hex: "#1e1e2e").opacity(0.72)
+                        )
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(
+                            Color(hex: modifier.accentHex)
+                                .opacity(isActive ? 0.95 : 0.42),
+                            lineWidth: isActive ? 1.5 : 1
+                        )
+                )
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+
+@available(macOS 14, *)
 struct KeyCell: View {
     let key: KeyboardPresentedKey
     let source: KeyboardPresentationSource
     let width: CGFloat
     let height: CGFloat
+
+    @Environment(\.isYabaiLayer) private var isYabaiLayer
 
     private var isOccupied: Bool {
         if source == .registry {
@@ -269,7 +369,16 @@ struct KeyCell: View {
         )
     }
 
+    @ViewBuilder
     private var registryContent: some View {
+        if isYabaiLayer {
+            yabaiRegistryContent
+        } else {
+            standardRegistryContent
+        }
+    }
+
+    private var standardRegistryContent: some View {
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 3) {
                 Spacer(minLength: 5)
@@ -305,6 +414,97 @@ struct KeyCell: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
                             .stroke(Color(hex: "#7f849c"), lineWidth: 1)
+                    )
+                    .padding(5)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var yabaiRegistryContent: some View {
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 3) {
+                Spacer(minLength: 5)
+                primaryContent
+                if let explanation = key.explanation {
+                    Text(explanation)
+                        .font(.system(size: height * 0.12, weight: .medium))
+                        .foregroundStyle(
+                            key.actionModifier == nil
+                                ? Color(hex: "#bac2de")
+                                : color
+                        )
+                        .lineLimit(isYabaiLayer ? 2 : 1)
+                        .minimumScaleFactor(0.5)
+                        .multilineTextAlignment(.center)
+                        .frame(height: isYabaiLayer ? height * 0.24 : nil)
+                } else if let freeLabel = key.freeLabel {
+                    Text(freeLabel)
+                        .font(.system(size: height * 0.13, design: .monospaced))
+                        .foregroundStyle(Color(hex: "#585b70"))
+                }
+                Spacer(
+                    minLength: isYabaiLayer && key.holdModifier != nil
+                        ? height * 0.26
+                        : 5
+                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 4)
+
+            if let actionModifier = key.actionModifier {
+                Text(actionModifier.glyph)
+                    .font(.system(size: height * 0.12, weight: .bold))
+                    .foregroundStyle(Color(hex: actionModifier.accentHex))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        Circle()
+                            .fill(Color(hex: "#1e1e2e").opacity(0.92))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                Color(hex: actionModifier.accentHex).opacity(0.9),
+                                lineWidth: 1
+                            )
+                    )
+                    .padding(5)
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .topTrailing
+                    )
+            }
+
+            if let modifier = key.holdModifier,
+               let glyph = KeyboardVisualSemantics.modifierGlyph(modifier)
+            {
+                Text(glyph)
+                    .font(.system(size: height * 0.15, weight: .semibold))
+                    .foregroundStyle(
+                        key.isHoldActive
+                            ? Color(hex: "#1e1e2e")
+                            : Color(hex: key.holdAccentHex ?? "#cdd6f4")
+                    )
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(
+                                key.isHoldActive
+                                    ? Color(hex: key.holdAccentHex ?? "#cdd6f4")
+                                        .opacity(0.92)
+                                    : Color(hex: "#1e1e2e").opacity(0.9)
+                            )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(
+                                Color(hex: key.holdAccentHex ?? "#7f849c")
+                                    .opacity(key.isHoldActive ? 1 : 0.72),
+                                lineWidth: key.isHoldActive ? 2 : 1
+                            )
                     )
                     .padding(5)
             }

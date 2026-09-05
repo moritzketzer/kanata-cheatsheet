@@ -11,6 +11,7 @@ private enum VisualRendererError: Error, CustomStringConvertible {
     case renderFailed(String)
     case contactSheetFailed(String)
     case hashMismatch(String)
+    case missingSymbol(position: String, token: String)
 
     var description: String {
         switch self {
@@ -26,6 +27,8 @@ private enum VisualRendererError: Error, CustomStringConvertible {
             return "Could not render contact sheet: \(profile)"
         case .hashMismatch(let path):
             return "Written image hash did not verify: \(path)"
+        case .missingSymbol(let position, let token):
+            return "Missing SF Symbol for Yabai \(position): \(token)"
         }
     }
 }
@@ -89,6 +92,7 @@ private struct VisualRenderer {
             withIntermediateDirectories: true
         )
         _ = NSApplication.shared.setActivationPolicy(.prohibited)
+        try validateYabaiSymbols(keyboardLayers.layers["yabai"])
 
         let display = Config.Display(width_percent: 75)
         var imageRecords: [RenderedImage] = []
@@ -109,13 +113,48 @@ private struct VisualRenderer {
                     display: display,
                     registry: registry,
                     showFreeModifierSpace: false,
-                    geometryProfileId: profile.id
+                    geometryProfileId: profile.id,
+                    yabaiQualifier: layerId == "yabai" ? "Preview" : nil
                 )
                 let rendered = try render(view: view, layerId: layerId)
                 let relativePath = "\(profile.id)/\(layerId).png"
                 let imageURL = outputURL.appendingPathComponent(relativePath)
                 try writeVerified(rendered.data, to: imageURL)
                 renderedLayers.append(rendered)
+                imageRecords.append(RenderedImage(
+                    path: relativePath,
+                    profileId: profile.id,
+                    layerId: layerId,
+                    width: rendered.width,
+                    height: rendered.height,
+                    sha256: sha256(rendered.data)
+                ))
+            }
+
+            let yabaiStates: [(String, Set<YabaiModifier>)] = [
+                ("base", []),
+                ("option", [.option]),
+                ("shift", [.shift]),
+                ("command", [.command]),
+                ("control", [.control]),
+                ("command-shift", [.command, .shift]),
+            ]
+            for (stateName, activeModifiers) in yabaiStates {
+                let layerId = "yabai-\(stateName)"
+                let view = KeyboardView(
+                    layerName: "yabai",
+                    legacyLayer: nil,
+                    display: display,
+                    registry: registry,
+                    showFreeModifierSpace: false,
+                    geometryProfileId: profile.id,
+                    activeModifiers: activeModifiers,
+                    yabaiQualifier: "Preview"
+                )
+                let rendered = try render(view: view, layerId: layerId)
+                let relativePath = "\(profile.id)/\(layerId).png"
+                let imageURL = outputURL.appendingPathComponent(relativePath)
+                try writeVerified(rendered.data, to: imageURL)
                 imageRecords.append(RenderedImage(
                     path: relativePath,
                     profileId: profile.id,
@@ -182,6 +221,27 @@ private struct VisualRenderer {
             to: outputURL.appendingPathComponent("manifest.json"),
             options: .atomic
         )
+    }
+
+    private static func validateYabaiSymbols(
+        _ layer: RegistryKeyboardLayer?
+    ) throws {
+        guard let layer else { return }
+        for (position, cell) in layer.cells.sorted(by: { $0.key < $1.key }) {
+            let visuals = [cell.presentation?.primary]
+                + (cell.presentation?.modifierVariants?.map(\.primary) ?? [])
+            for visual in visuals.compactMap({ $0 }) where visual.kind == "sf-symbol" {
+                guard NSImage(
+                    systemSymbolName: visual.token,
+                    accessibilityDescription: nil
+                ) != nil else {
+                    throw VisualRendererError.missingSymbol(
+                        position: position,
+                        token: visual.token
+                    )
+                }
+            }
+        }
     }
 
     @MainActor

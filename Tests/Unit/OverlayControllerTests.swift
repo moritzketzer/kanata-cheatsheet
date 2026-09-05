@@ -12,6 +12,272 @@ struct OverlayControllerTests {
         )
     }
 
+    private var yabaiConfig: Config {
+        Config(
+            display: Config.Display(delay_ms: 100),
+            layers: [
+                "yabai": Config.Layer(
+                    label: "YABAI",
+                    trigger: "manual",
+                    groups: [:]
+                ),
+            ]
+        )
+    }
+
+    @Test("connected live visible Yabai enables modifier sampling")
+    func liveYabaiEnablesModifierSampling() {
+        let logic = OverlayLogic(config: yabaiConfig)
+
+        #expect(logic.handleConnectionChange(true) == .none)
+        #expect(logic.handleLayerChange("yabai") == .none)
+        #expect(!logic.samplesYabaiModifiers)
+        #expect(logic.handleMessage("cheatsheet-show") == .show("yabai"))
+        #expect(logic.samplesYabaiModifiers)
+        #expect(logic.yabaiQualifier == nil)
+    }
+
+    @Test("hidden and delayed Yabai snapshots do not change presentation")
+    func hiddenAndDelayedYabaiIgnoreModifierSnapshots() {
+        let hidden = OverlayLogic(config: yabaiConfig)
+        _ = hidden.handleConnectionChange(true)
+        _ = hidden.handleLayerChange("yabai")
+
+        #expect(hidden.handleModifierFlags(0x20) == .none)
+        #expect(hidden.activeModifiers.isEmpty)
+
+        let delayed = OverlayLogic(
+            config: Config(
+                layers: [
+                    "yabai": Config.Layer(label: "YABAI", groups: [:]),
+                ]
+            )
+        )
+        _ = delayed.handleConnectionChange(true)
+        #expect(delayed.handleLayerChange("yabai") == .startDelay("yabai"))
+        #expect(delayed.handleModifierFlags(0x8) == .none)
+        #expect(delayed.activeModifiers.isEmpty)
+    }
+
+    @Test("live Yabai refreshes only for changed modifier snapshots")
+    func liveYabaiRefreshesChangedSnapshots() {
+        let logic = OverlayLogic(config: yabaiConfig)
+        _ = logic.handleConnectionChange(true)
+        _ = logic.handleLayerChange("yabai")
+        _ = logic.handleMessage("cheatsheet-show")
+
+        #expect(logic.handleModifierFlags(0x20) == .refresh)
+        #expect(logic.activeModifiers == [.option])
+        #expect(logic.handleModifierFlags(0x20 | 0x2054) == .none)
+        #expect(logic.activeModifiers == [.option])
+        #expect(logic.handleModifierFlags(0) == .refresh)
+        #expect(logic.activeModifiers.isEmpty)
+    }
+
+    @Test("Yabai hide layer exit and disconnect clear active roles")
+    func YabaiLifecycleClearsActiveRoles() {
+        let layerExit = liveYabaiLogic()
+        _ = layerExit.handleModifierFlags(0x2)
+        #expect(layerExit.handleLayerChange("mine") == .hide)
+        #expect(layerExit.activeModifiers.isEmpty)
+        #expect(!layerExit.samplesYabaiModifiers)
+
+        let hidden = liveYabaiLogic()
+        _ = hidden.handleModifierFlags(0x8)
+        #expect(hidden.handleMessage("cheatsheet-hide") == .hide)
+        #expect(hidden.activeModifiers.isEmpty)
+        #expect(!hidden.samplesYabaiModifiers)
+
+        let disconnected = liveYabaiLogic()
+        _ = disconnected.handleModifierFlags(0x1)
+        #expect(disconnected.handleConnectionChange(false) == .refresh)
+        #expect(disconnected.activeModifiers.isEmpty)
+        #expect(disconnected.currentLayer == nil)
+        #expect(disconnected.yabaiQualifier == "Kanata disconnected")
+        #expect(!disconnected.samplesYabaiModifiers)
+    }
+
+    @Test("reconnected Yabai waits for a fresh layer notification")
+    func reconnectWaitsForFreshYabaiLayer() {
+        let logic = liveYabaiLogic()
+        _ = logic.handleModifierFlags(0x8)
+        _ = logic.handleConnectionChange(false)
+
+        #expect(logic.handleConnectionChange(true) == .refresh)
+        #expect(logic.yabaiQualifier == "Preview")
+        #expect(!logic.samplesYabaiModifiers)
+        #expect(logic.handleModifierFlags(0x20) == .none)
+        #expect(logic.activeModifiers.isEmpty)
+
+        #expect(logic.handleLayerChange("yabai") == .refresh)
+        #expect(logic.samplesYabaiModifiers)
+        #expect(logic.handleModifierFlags(0x20) == .refresh)
+        #expect(logic.activeModifiers == [.option])
+    }
+
+    @Test("controller samples Yabai before its first visible frame")
+    @MainActor
+    func controllerSamplesBeforeShowingYabai() throws {
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(yabaiRegistry()),
+            modifierFlags: { 0x20 }
+        )
+
+        controller.handleConnectionChange(true)
+        controller.handleLayerChange("yabai")
+        controller.handleMessage("cheatsheet-show")
+
+        let panel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .option)
+        #expect(controller.isModifierTimerRunning)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("modifier refresh reuses the Yabai panel host and frame")
+    @MainActor
+    func modifierRefreshReusesPanelGeometry() throws {
+        var flags: UInt = 0
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(yabaiRegistry()),
+            modifierFlags: { flags }
+        )
+        controller.handleConnectionChange(true)
+        controller.handleLayerChange("yabai")
+        controller.handleMessage("cheatsheet-show")
+        let panel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let frame = panel.frame
+
+        flags = 0x8
+        controller.sampleModifierFlags()
+
+        #expect(panel === NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
+        #expect(panel.contentView === host)
+        #expect(panel.frame == frame)
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .command)
+
+        controller.handleConnectionChange(false)
+        #expect(!controller.isModifierTimerRunning)
+        #expect(host.rootView.yabaiQualifier == "Kanata disconnected")
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("visible Yabai preview samples before the fresh live layer refresh")
+    @MainActor
+    func previewToLiveSamplesBeforeRefresh() throws {
+        let flags: UInt = 0x20
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(yabaiRegistry()),
+            modifierFlags: { flags }
+        )
+        controller.handleConnectionChange(true)
+        controller.handleMessage("cheatsheet-show:yabai")
+        let panel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let frame = panel.frame
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == nil)
+        #expect(host.rootView.yabaiQualifier == "Preview")
+
+        controller.handleLayerChange("yabai")
+
+        #expect(panel.contentView === host)
+        #expect(panel.frame == frame)
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .option)
+        #expect(host.rootView.yabaiQualifier == nil)
+        #expect(controller.isModifierTimerRunning)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("reconnect samples before the fresh Yabai layer refresh")
+    @MainActor
+    func reconnectSamplesBeforeFreshLayerRefresh() throws {
+        var flags: UInt = 0
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(yabaiRegistry()),
+            modifierFlags: { flags }
+        )
+        controller.handleConnectionChange(true)
+        controller.handleLayerChange("yabai")
+        controller.handleMessage("cheatsheet-show")
+        let panel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let frame = panel.frame
+
+        controller.handleConnectionChange(false)
+        controller.handleConnectionChange(true)
+        flags = 0x8
+        controller.handleLayerChange("yabai")
+
+        #expect(panel.contentView === host)
+        #expect(panel.frame == frame)
+        #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .command)
+        #expect(host.rootView.yabaiQualifier == nil)
+
+        controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("Yabai fitting size is invariant across modifier states")
+    @MainActor
+    func YabaiModifierStatesKeepFittingSize() {
+        let display = Config.Display(width_percent: 75)
+        let registry = yabaiRegistry()
+        let modifierStates: [Set<YabaiModifier>] = [
+            [], [.option], [.shift], [.command], [.control], [.command, .shift],
+        ]
+        let sizes = modifierStates.map { modifiers -> NSSize in
+            NSHostingView(rootView: KeyboardView(
+                layerName: "yabai",
+                legacyLayer: nil,
+                display: display,
+                registry: registry,
+                showFreeModifierSpace: false,
+                activeModifiers: modifiers,
+                yabaiQualifier: "Preview"
+            )).fittingSize
+        }
+
+        #expect(sizes.allSatisfy { $0 == sizes[0] })
+    }
+
     @Test("configured layer starts delay")
     func configuredLayerStartsDelay() {
         let config = Config(
@@ -1078,6 +1344,98 @@ struct OverlayControllerTests {
         _ = logic.handleMessage("cheatsheet-pin-toggle:mine")
         _ = logic.handleMessage("cheatsheet-input-path-toggle")
         return logic
+    }
+
+    private func liveYabaiLogic() -> OverlayLogic {
+        let logic = OverlayLogic(config: yabaiConfig)
+        _ = logic.handleConnectionChange(true)
+        _ = logic.handleLayerChange("yabai")
+        _ = logic.handleMessage("cheatsheet-show")
+        return logic
+    }
+
+    private func yabaiRegistry() -> KeybindingRegistry {
+        let position = RegistryKeyboardPosition(
+            position: "KeyU",
+            sourceKey: "u",
+            mineKey: "U",
+            namedKey: nil,
+            width: 1
+        )
+        let presentation = RegistryKeyPresentation(
+            primary: RegistryKeyVisual(kind: "sf-symbol", token: "window.ceiling"),
+            holdModifier: "option",
+            explanation: "Next window",
+            modifierVariants: [
+                RegistryModifierVariant(
+                    modifier: .option,
+                    primary: RegistryKeyVisual(
+                        kind: "sf-symbol",
+                        token: "square.stack.3d.up"
+                    ),
+                    explanation: "Stack next"
+                ),
+                RegistryModifierVariant(
+                    modifier: .command,
+                    primary: RegistryKeyVisual(
+                        kind: "sf-symbol",
+                        token: "arrow.up.to.line.square"
+                    ),
+                    explanation: "Warp north"
+                ),
+            ]
+        )
+        let cell = RegistryKeyboardCell(
+            bindingId: "test.yabai.next-window",
+            displayKey: "U",
+            sourceKey: "u",
+            actionLabel: "Focused app next window",
+            group: "windows",
+            icon: RegistryKeyIcon(kind: "sf-symbol", token: "window.ceiling"),
+            presentation: presentation
+        )
+        return KeybindingRegistry(
+            schemaVersion: 2,
+            providers: [],
+            bindings: [],
+            diagnostics: [],
+            views: RegistryViews(
+                modifierSpace: ModifierSpaceView(
+                    id: "modifier-space",
+                    label: "Modifier + Space",
+                    slots: []
+                ),
+                allBindings: AllBindingsView(
+                    id: "all-bindings",
+                    label: "All Bindings",
+                    bindingIds: []
+                ),
+                keyboardLayers: KeyboardLayersView(
+                    id: "keyboard-layers",
+                    label: "Keyboard Layers",
+                    geometry: RegistryKeyboardGeometry(
+                        layoutId: "mine-iso",
+                        rows: [[position]]
+                    ),
+                    layers: [
+                        "yabai": RegistryKeyboardLayer(
+                            id: "yabai",
+                            label: "Yabai",
+                            trigger: "manual",
+                            overlayGroup: nil,
+                            showBaseKeys: true,
+                            groups: [
+                                RegistryKeyboardGroup(
+                                    id: "windows",
+                                    color: "#cba6f7"
+                                ),
+                            ],
+                            cells: ["KeyU": cell]
+                        ),
+                    ]
+                )
+            )
+        )
     }
 
     private func geometryProfileRegistry(

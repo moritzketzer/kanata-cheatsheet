@@ -68,10 +68,12 @@ extension AppDelegate: KanataTCPClientDelegate {
 
     func didConnect() {
         Log.info("Connected to kanata TCP")
+        overlayController?.handleConnectionChange(true)
     }
 
     func didDisconnect() {
         Log.info("Disconnected from kanata TCP — will reconnect")
+        overlayController?.handleConnectionChange(false)
     }
 }
 

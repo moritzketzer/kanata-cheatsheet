@@ -32,6 +32,21 @@ final class OverlayLogic {
     private(set) var isPinned = false
     private(set) var showFreeModifierSpace = false
     private(set) var showInputPath = false
+    private(set) var isConnected = false
+    private(set) var activeModifiers: Set<YabaiModifier> = []
+
+    var samplesYabaiModifiers: Bool {
+        isConnected
+            && currentLayer == "yabai"
+            && visibleLayer == "yabai"
+            && isVisible
+    }
+
+    var yabaiQualifier: String? {
+        guard isVisible, visibleLayer == "yabai" else { return nil }
+        guard isConnected else { return "Kanata disconnected" }
+        return currentLayer == "yabai" ? nil : "Preview"
+    }
 
     var selectedGeometryProfileId: String? {
         geometrySelection.selectedProfileId
@@ -90,6 +105,17 @@ final class OverlayLogic {
     }
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
+        let previousQualifier = yabaiQualifier
+        let previousModifiers = activeModifiers
+        let action = updateLayer(layer)
+        return finalizeYabaiState(
+            action,
+            previousQualifier: previousQualifier,
+            previousModifiers: previousModifiers
+        )
+    }
+
+    private func updateLayer(_ layer: String) -> OverlayAction {
         currentLayer = layer
         if layer != "apps" {
             showFreeModifierSpace = false
@@ -156,6 +182,17 @@ final class OverlayLogic {
     }
 
     func handleMessage(_ message: String) -> OverlayAction {
+        let previousQualifier = yabaiQualifier
+        let previousModifiers = activeModifiers
+        let action = updateMessage(message)
+        return finalizeYabaiState(
+            action,
+            previousQualifier: previousQualifier,
+            previousModifiers: previousModifiers
+        )
+    }
+
+    private func updateMessage(_ message: String) -> OverlayAction {
         if message.hasPrefix("cheatsheet-geometry-select:") {
             let id = String(message.dropFirst("cheatsheet-geometry-select:".count))
             guard let selected = geometrySelection.select(id) else { return .none }
@@ -253,6 +290,48 @@ final class OverlayLogic {
             return .none
         }
     }
+
+    func handleConnectionChange(_ connected: Bool) -> OverlayAction {
+        let previousQualifier = yabaiQualifier
+        let previousModifiers = activeModifiers
+        isConnected = connected
+        if !connected {
+            currentLayer = nil
+        }
+        return finalizeYabaiState(
+            .none,
+            previousQualifier: previousQualifier,
+            previousModifiers: previousModifiers
+        )
+    }
+
+    func handleModifierFlags(_ flags: UInt) -> OverlayAction {
+        guard samplesYabaiModifiers else { return .none }
+        let modifiers = YabaiModifier.active(in: flags)
+        guard modifiers != activeModifiers else { return .none }
+        activeModifiers = modifiers
+        return .refresh
+    }
+
+    private func finalizeYabaiState(
+        _ action: OverlayAction,
+        previousQualifier: String?,
+        previousModifiers: Set<YabaiModifier>
+    ) -> OverlayAction {
+        if !samplesYabaiModifiers {
+            activeModifiers = []
+        }
+        let presentationChanged = previousQualifier != yabaiQualifier
+            || previousModifiers != activeModifiers
+        if action == .none,
+           presentationChanged,
+           isVisible,
+           visibleLayer == "yabai"
+        {
+            return .refresh
+        }
+        return action
+    }
 }
 
 // MARK: - UI controller
@@ -263,19 +342,25 @@ final class OverlayController {
     private let registry: KeybindingRegistry?
     private let logic: OverlayLogic
     private let defaults: UserDefaults
+    private let modifierFlags: () -> UInt
     private var panel: OverlayPanel?
     private var hostView: NSHostingView<KeyboardView>?
     private var delayTimer: Timer?
+    private var modifierTimer: Timer?
     private var currentLayer: String?
+
+    var isModifierTimerRunning: Bool { modifierTimer != nil }
 
     init(
         config: Config,
         registryResult: Result<KeybindingRegistry, Error>,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        modifierFlags: @escaping () -> UInt = { NSEvent.modifierFlags.rawValue }
     ) {
         self.config = config
         self.registry = try? registryResult.get()
         self.defaults = defaults
+        self.modifierFlags = modifierFlags
         let storedProfileId = defaults.string(
             forKey: KeyboardGeometrySelection.defaultsKey
         )
@@ -295,9 +380,28 @@ final class OverlayController {
         }
     }
 
+    deinit {
+        delayTimer?.invalidate()
+        modifierTimer?.invalidate()
+    }
+
     func handleLayerChange(_ layer: String) {
+        let wasSamplingYabaiModifiers = logic.samplesYabaiModifiers
         let action = logic.handleLayerChange(layer)
-        executeAction(action)
+        if !wasSamplingYabaiModifiers,
+           logic.samplesYabaiModifiers,
+           action == .refresh
+        {
+            _ = logic.handleModifierFlags(modifierFlags())
+            executeAction(action, refitRefresh: false)
+        } else {
+            executeAction(action)
+        }
+    }
+
+    func handleConnectionChange(_ connected: Bool) {
+        let action = logic.handleConnectionChange(connected)
+        executeAction(action, refitRefresh: false)
     }
 
     func handleMessage(_ message: String) {
@@ -311,7 +415,11 @@ final class OverlayController {
         executeAction(action)
     }
 
-    private func executeAction(_ action: OverlayAction) {
+    private func executeAction(
+        _ action: OverlayAction,
+        refitRefresh: Bool = true
+    ) {
+        defer { synchronizeModifierTimer() }
         switch action {
         case .startDelay:
             delayTimer?.invalidate()
@@ -322,15 +430,17 @@ final class OverlayController {
         case .retargetDelay:
             break
         case .show(let layerName):
+            sampleBeforePresentingLiveYabai()
             showOverlay(for: layerName)
         case .replace(let layerName):
+            sampleBeforePresentingLiveYabai()
             replaceOverlay(with: layerName)
         case .hide:
             delayTimer?.invalidate()
             delayTimer = nil
             hideOverlay()
         case .refresh:
-            refreshOverlay()
+            refreshOverlay(refit: refitRefresh)
         case .geometryChanged(let id, let refreshVisibleOverlay, let persistSelection):
             if persistSelection {
                 defaults.set(id, forKey: KeyboardGeometrySelection.defaultsKey)
@@ -347,6 +457,31 @@ final class OverlayController {
         delayTimer = nil
         let action = logic.delayExpired()
         executeAction(action)
+    }
+
+    func sampleModifierFlags() {
+        let action = logic.handleModifierFlags(modifierFlags())
+        executeAction(action, refitRefresh: false)
+    }
+
+    private func sampleBeforePresentingLiveYabai() {
+        guard logic.samplesYabaiModifiers else { return }
+        _ = logic.handleModifierFlags(modifierFlags())
+    }
+
+    private func synchronizeModifierTimer() {
+        guard logic.samplesYabaiModifiers, panel != nil else {
+            modifierTimer?.invalidate()
+            modifierTimer = nil
+            return
+        }
+        guard modifierTimer == nil else { return }
+        modifierTimer = Timer.scheduledTimer(
+            withTimeInterval: 0.05,
+            repeats: true
+        ) { [weak self] _ in
+            self?.sampleModifierFlags()
+        }
     }
 
     private func showOverlay(for layerName: String) {
@@ -393,11 +528,13 @@ final class OverlayController {
             registry: registry,
             showFreeModifierSpace: logic.showFreeModifierSpace,
             geometryProfileId: logic.selectedGeometryProfileId,
-            showInputPath: logic.showsInputPath(for: layerName)
+            showInputPath: logic.showsInputPath(for: layerName),
+            activeModifiers: logic.activeModifiers,
+            yabaiQualifier: logic.yabaiQualifier
         )
     }
 
-    private func refreshOverlay() {
+    private func refreshOverlay(refit: Bool = true) {
         guard
             let currentLayer,
             let hostView,
@@ -405,8 +542,10 @@ final class OverlayController {
         else { return }
         hostView.rootView = makeKeyboardView(layerName: currentLayer)
 
-        let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
-        panel.setFrame(fit(hostView, on: screen), display: true)
+        if refit {
+            let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
+            panel.setFrame(fit(hostView, on: screen), display: true)
+        }
     }
 
     private func replaceOverlay(with layerName: String) {
