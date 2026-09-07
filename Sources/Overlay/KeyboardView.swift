@@ -444,18 +444,18 @@ struct KeyCell: View {
 
     private var yabaiRegistryContent: some View {
         ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 3) {
-                Spacer(minLength: 5)
+            VStack(spacing: physicalId == nil ? 3 : 0) {
+                Spacer(minLength: physicalId == nil ? 5 : 0)
                 primaryContent
                 if let explanation = key.explanation {
                     Text(explanation)
-                        .font(.system(size: height * 0.12, weight: .medium))
+                        .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .medium))
                         .foregroundStyle(
                             key.actionModifier == nil
                                 ? Color(hex: "#bac2de")
                                 : color
                         )
-                        .lineLimit(isYabaiLayer ? 2 : 1)
+                        .lineLimit(physicalId == nil && isYabaiLayer ? 2 : 1)
                         .minimumScaleFactor(0.5)
                         .multilineTextAlignment(.center)
                         .frame(height: isYabaiLayer ? height * 0.24 : nil)
@@ -465,20 +465,20 @@ struct KeyCell: View {
                         .foregroundStyle(Color(hex: "#585b70"))
                 }
                 Spacer(
-                    minLength: isYabaiLayer && key.holdModifier != nil
-                        ? height * 0.26
-                        : 5
+                    minLength: physicalId != nil ? 0
+                        : (isYabaiLayer && key.holdModifier != nil ? height * 0.26 : 5)
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 4)
+            .padding(.horizontal, physicalId == nil ? 4 : 1)
+            .padding(.trailing, physicalId != nil && (key.actionModifier != nil || key.holdModifier != nil) ? 7 : 0)
 
             if let actionModifier = key.actionModifier {
                 Text(actionModifier.glyph)
-                    .font(.system(size: height * 0.12, weight: .bold))
+                    .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .bold))
                     .foregroundStyle(Color(hex: actionModifier.accentHex))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
+                    .padding(.horizontal, physicalId == nil ? 4 : 1)
+                    .padding(.vertical, physicalId == nil ? 1 : 0.25)
                     .background(
                         Circle()
                             .fill(Color(hex: "#1e1e2e").opacity(0.92))
@@ -490,7 +490,7 @@ struct KeyCell: View {
                                 lineWidth: 1
                             )
                     )
-                    .padding(5)
+                    .padding(physicalId == nil ? 5 : 1)
                     .frame(
                         maxWidth: .infinity,
                         maxHeight: .infinity,
@@ -502,14 +502,14 @@ struct KeyCell: View {
                let glyph = KeyboardVisualSemantics.modifierGlyph(modifier)
             {
                 Text(glyph)
-                    .font(.system(size: height * 0.15, weight: .semibold))
+                    .font(.system(size: physicalId == nil ? height * 0.15 : max(3.5, height * 0.15), weight: .semibold))
                     .foregroundStyle(
                         key.isHoldActive
                             ? Color(hex: "#1e1e2e")
                             : Color(hex: key.holdAccentHex ?? "#cdd6f4")
                     )
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
+                    .padding(.horizontal, physicalId == nil ? 4 : 1)
+                    .padding(.vertical, physicalId == nil ? 1 : 0.25)
                     .background(
                         RoundedRectangle(cornerRadius: 4)
                             .fill(
@@ -527,7 +527,7 @@ struct KeyCell: View {
                                 lineWidth: key.isHoldActive ? 2 : 1
                             )
                     )
-                    .padding(5)
+                    .padding(physicalId == nil ? 5 : 1)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
