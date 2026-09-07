@@ -267,7 +267,6 @@ struct KeyboardGeometryLayoutTests {
         #expect(left.size == right.size)
         #expect(left.size.width < 7 * keySize)
         #expect(left.keys[0].path.boundingRect.width > left.keys[1].path.boundingRect.width)
-        #expect(left.keys[7].path.boundingRect.height > left.keys[3].path.boundingRect.height)
         for (l, r) in zip(left.keys, right.keys) {
             #expect(abs(l.content.midX + r.content.midX - left.size.width) < 0.001)
             #expect(l.content.size == r.content.size)
@@ -295,6 +294,19 @@ struct KeyboardGeometryLayoutTests {
                     #expect(geometry.keys.filter { $0.path.contains(point) }.count <= 1)
                 }
             }
+        }
+    }
+
+    @Test("Defy thumbs use the approved compact silhouette", arguments: [CGFloat(28), CGFloat(64)])
+    func compactThumbSilhouette(_ keySize: CGFloat) {
+        let geometry = DefyThumbGeometry(side: .left, keySize: keySize)
+        #expect(geometry.size.width / geometry.size.height >= 1.20)
+        #expect(geometry.size.width / geometry.size.height <= 1.30)
+        #expect(geometry.keys[7].path.boundingRect.height < geometry.size.height * 0.38)
+        for key in geometry.keys {
+            var curves = 0
+            key.path.forEach { if case .quadCurve = $0 { curves += 1 } }
+            #expect(curves == key.outline.count)
         }
     }
 

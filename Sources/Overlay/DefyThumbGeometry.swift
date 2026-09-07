@@ -8,7 +8,22 @@ struct DefyThumbKeyGeometry: Identifiable {
 
     var path: Path {
         Path { path in
-            path.addLines(outline)
+            let radius = min(content.width, content.height) * 0.15
+            for index in outline.indices {
+                let vertex = outline[index]
+                let previous = outline[(index + outline.count - 1) % outline.count]
+                let next = outline[(index + 1) % outline.count]
+                func inset(toward point: CGPoint) -> CGPoint {
+                    let dx = point.x - vertex.x
+                    let dy = point.y - vertex.y
+                    let fraction = min(0.25, radius / hypot(dx, dy))
+                    return CGPoint(x: vertex.x + dx * fraction, y: vertex.y + dy * fraction)
+                }
+                let entry = inset(toward: previous)
+                let exit = inset(toward: next)
+                if index == 0 { path.move(to: entry) } else { path.addLine(to: entry) }
+                path.addQuadCurve(to: exit, control: vertex)
+            }
             path.closeSubpath()
         }
     }
@@ -33,24 +48,24 @@ struct DefyThumbGeometry {
         // Independently drawn approximations, not Bazecor SVG paths. The array
         // is physical position order 1...8, independent of firmware carriers.
         let outlines: [[CGPoint]] = [
-            [(0, 0), (1.40, 0.10), (1.25, 1.05), (0, 0.85)],
-            [(1.52, 0.12), (2.60, 0.28), (2.17, 1.20), (1.36, 1.06)],
-            [(2.73, 0.33), (3.75, 0.78), (3.03, 1.65), (2.30, 1.25)],
-            [(3.87, 0.91), (4.55, 1.80), (3.50, 2.34), (3.17, 1.73)],
-            [(0, 0.98), (1.22, 1.18), (1.05, 2.25), (0.16, 2.04)],
-            [(1.35, 1.23), (2.17, 1.40), (1.80, 2.40), (1.19, 2.27)],
-            [(2.29, 1.47), (3.10, 1.90), (2.73, 2.85), (1.92, 2.62)],
-            [(2.68, 2.92), (3.65, 2.53), (4.67, 2.03), (4.59, 3.58), (3.31, 4.10)],
+            [(0.13, 0.00), (1.70, 0.16), (1.52, 1.10), (0.00, 0.87)],
+            [(1.77, 0.18), (2.87, 0.36), (3.05, 0.46), (2.63, 1.30), (1.57, 1.10)],
+            [(3.15, 0.43), (3.80, 0.72), (4.27, 1.07), (3.44, 1.80), (2.69, 1.32)],
+            [(4.32, 1.17), (4.70, 2.40), (3.88, 2.69), (3.48, 1.84)],
+            [(0.00, 0.95), (1.49, 1.18), (1.24, 2.26), (0.31, 2.10)],
+            [(1.55, 1.19), (2.88, 1.53), (2.24, 2.49), (1.31, 2.28)],
+            [(2.98, 1.57), (3.46, 2.02), (3.80, 2.73), (2.75, 3.04), (2.35, 2.51)],
+            [(2.79, 3.09), (4.70, 2.51), (4.62, 3.24), (4.40, 3.52), (3.22, 3.80)],
         ].map { $0.map { CGPoint(x: $0.0, y: $0.1) } }
         let contentRects = [
-            CGRect(x: 0.13, y: 0.19, width: 0.97, height: 0.65),
-            CGRect(x: 1.56, y: 0.35, width: 0.60, height: 0.68),
-            CGRect(x: 2.73, y: 0.75, width: 0.40, height: 0.68),
-            CGRect(x: 3.60, y: 1.38, width: 0.44, height: 0.68),
-            CGRect(x: 0.28, y: 1.27, width: 0.67, height: 0.70),
-            CGRect(x: 1.47, y: 1.46, width: 0.38, height: 0.75),
-            CGRect(x: 2.24, y: 1.98, width: 0.45, height: 0.72),
-            CGRect(x: 3.36, y: 3.05, width: 0.90, height: 0.65),
+            CGRect(x: 0.22, y: 0.24, width: 1.24, height: 0.62),
+            CGRect(x: 1.87, y: 0.36, width: 0.78, height: 0.76),
+            CGRect(x: 3.05, y: 0.73, width: 0.67, height: 0.76),
+            CGRect(x: 3.80, y: 1.66, width: 0.63, height: 0.76),
+            CGRect(x: 0.31, y: 1.19, width: 0.96, height: 0.76),
+            CGRect(x: 1.53, y: 1.45, width: 0.84, height: 0.76),
+            CGRect(x: 2.72, y: 2.04, width: 0.69, height: 0.76),
+            CGRect(x: 3.54, y: 2.91, width: 0.80, height: 0.58),
         ]
         // Small keys need extra label room; large diagrams use 1:1 proportions.
         let scale = min(keySize * 1.3, max(keySize, 64))
