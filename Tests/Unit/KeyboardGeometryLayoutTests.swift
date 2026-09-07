@@ -360,6 +360,30 @@ struct KeyboardGeometryLayoutTests {
         }
     }
 
+    @Test("installed thumb cells can omit their rectangular shell")
+    @MainActor
+    func thumbCellWithoutShell() throws {
+        func bitmap(showsShell: Bool) throws -> NSBitmapImageRep {
+            let host = NSHostingView(rootView: KeyCell(
+                key: presentedKey(), source: .registry, width: 64, height: 48,
+                physicalId: "LT1", showsShell: showsShell
+            ))
+            host.frame = NSRect(x: 0, y: 0, width: 64, height: 48)
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            return bitmap
+        }
+        let ordinary = try bitmap(showsShell: true)
+        let thumb = try bitmap(showsShell: false)
+        #expect(ordinary.pixelsWide == thumb.pixelsWide)
+        #expect(ordinary.pixelsHigh == thumb.pixelsHigh)
+        let x = thumb.pixelsWide / 2
+        let y = thumb.pixelsHigh * 3 / 4
+        #expect(try #require(ordinary.colorAt(x: x, y: y)).alphaComponent > 0)
+        #expect(try #require(thumb.colorAt(x: x, y: y)).alphaComponent == 0)
+    }
+
     private func inputPathSlot(
         key: KeyboardPresentedKey,
         mineHoldModifier: String? = nil

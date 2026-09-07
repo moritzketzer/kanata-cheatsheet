@@ -405,11 +405,11 @@ private struct DefyThumbFan: View {
         case .key(let key):
             let cell = KeyCell(
                 key: key, source: source, width: rect.width, height: rect.height,
-                physicalId: geometry.id
+                physicalId: geometry.id, showsShell: false
             )
             geometry.path.fill(cell.fillColor)
             geometry.path.stroke(cell.strokeColor, lineWidth: 1)
-            cell.content.position(x: rect.midX, y: rect.midY)
+            cell.position(x: rect.midX, y: rect.midY)
                 .accessibilityElement(children: .combine)
         case .inputPath(let slot):
             let labelHeight = max(6, keySize * 0.13)

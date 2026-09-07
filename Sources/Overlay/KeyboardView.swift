@@ -311,6 +311,7 @@ struct KeyCell: View {
     let width: CGFloat
     let height: CGFloat
     var physicalId: String? = nil
+    var showsShell: Bool = true
 
     @Environment(\.isYabaiLayer) private var isYabaiLayer
 
@@ -335,12 +336,12 @@ struct KeyCell: View {
 
     var body: some View {
         content
-            .background(RoundedRectangle(cornerRadius: 6).fill(fillColor))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(strokeColor, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 6).fill(showsShell ? fillColor : .clear))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(showsShell ? strokeColor : .clear, lineWidth: 1))
     }
 
     @ViewBuilder
-    var content: some View {
+    private var content: some View {
         if let physicalId {
             VStack(spacing: 1) {
                 Text(physicalId)
