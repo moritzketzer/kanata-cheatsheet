@@ -39,7 +39,7 @@ struct DefyThumbGeometry {
             [(3.87, 0.91), (4.55, 1.80), (3.50, 2.34), (3.17, 1.73)],
             [(0, 0.98), (1.22, 1.18), (1.05, 2.25), (0.16, 2.04)],
             [(1.35, 1.23), (2.17, 1.40), (1.80, 2.40), (1.19, 2.27)],
-            [(2.29, 1.47), (3.10, 1.90), (2.55, 2.75), (1.92, 2.45)],
+            [(2.29, 1.47), (3.10, 1.90), (2.73, 2.85), (1.92, 2.62)],
             [(2.68, 2.92), (3.65, 2.53), (4.67, 2.03), (4.59, 3.58), (3.31, 4.10)],
         ].map { $0.map { CGPoint(x: $0.0, y: $0.1) } }
         let contentRects = [
@@ -49,7 +49,7 @@ struct DefyThumbGeometry {
             CGRect(x: 3.60, y: 1.38, width: 0.44, height: 0.68),
             CGRect(x: 0.28, y: 1.27, width: 0.67, height: 0.70),
             CGRect(x: 1.47, y: 1.46, width: 0.38, height: 0.75),
-            CGRect(x: 2.22, y: 1.96, width: 0.42, height: 0.60),
+            CGRect(x: 2.24, y: 1.98, width: 0.45, height: 0.72),
             CGRect(x: 3.36, y: 3.05, width: 0.90, height: 0.65),
         ]
         // Small keys need extra label room; large diagrams use 1:1 proportions.

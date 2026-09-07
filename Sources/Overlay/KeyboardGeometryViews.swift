@@ -412,9 +412,10 @@ private struct DefyThumbFan: View {
             cell.content.position(x: rect.midX, y: rect.midY)
                 .accessibilityElement(children: .combine)
         case .inputPath(let slot):
-            let labelHeight = max(8, keySize * 0.13)
+            let labelHeight = max(6, keySize * 0.13)
             let cell = KeyboardInputPathCell(
-                slot: slot, width: rect.width, height: rect.height - labelHeight
+                slot: slot, width: rect.width, height: rect.height - labelHeight,
+                isThumb: true
             )
             geometry.path.fill(cell.fillColor)
             geometry.path.stroke(cell.strokeColor, lineWidth: 1)
@@ -442,7 +443,7 @@ private struct DefyThumbFan: View {
 
     private func physicalLabel(_ id: String, height: CGFloat) -> some View {
         Text(id)
-            .font(.system(size: max(7, height * 0.85), weight: .semibold, design: .monospaced))
+            .font(.system(size: max(5, height * 0.85), weight: .semibold, design: .monospaced))
             .foregroundStyle(Color(hex: "#a6adc8"))
             .lineLimit(1)
             .minimumScaleFactor(0.5)
@@ -453,11 +454,14 @@ private struct DefyThumbFan: View {
 
 @available(macOS 14, *)
 struct KeyboardInputPathCell: View {
-    private static let minimumScaleFactor = 0.42
-
     let slot: KeyboardPresentedDefySlot
     let width: CGFloat
     let height: CGFloat
+    var isThumb: Bool = false
+
+    var primaryFontSize: CGFloat { isThumb ? max(4, height * 0.14) : height * 0.14 }
+    var sourceFontSize: CGFloat { isThumb ? max(3.5, height * 0.12) : height * 0.12 }
+    var minimumScaleFactor: CGFloat { isThumb ? 0.85 : 0.42 }
 
     private var labels: KeyboardInputPathLabels {
         KeyboardInputPathLabels.resolve(slot)
@@ -486,56 +490,56 @@ struct KeyboardInputPathCell: View {
     }
 
     var content: some View {
-        VStack(spacing: 1) {
+        VStack(spacing: isThumb ? 0.5 : 1) {
             Text(labels.firmware)
                 .font(.system(
-                    size: height * 0.14,
+                    size: primaryFontSize,
                     weight: .semibold,
                     design: .monospaced
                 ))
                 .foregroundStyle(Color(hex: "#cba6f7"))
                 .lineLimit(2)
-                .minimumScaleFactor(Self.minimumScaleFactor)
+                .minimumScaleFactor(minimumScaleFactor)
                 .multilineTextAlignment(.center)
 
             if labels.isDeviceLocal {
                 Text("DEVICE-LOCAL")
                     .font(.system(
-                        size: height * 0.115,
+                        size: isThumb ? max(3.5, height * 0.115) : height * 0.115,
                         weight: .medium,
                         design: .monospaced
                     ))
                     .foregroundStyle(Color(hex: "#6c7086"))
                     .lineLimit(1)
-                    .minimumScaleFactor(Self.minimumScaleFactor)
+                    .minimumScaleFactor(minimumScaleFactor)
             } else {
                 if let source = labels.source {
                     Text(source)
                         .font(.system(
-                            size: height * 0.12,
+                            size: sourceFontSize,
                             design: .monospaced
                         ))
                         .foregroundStyle(Color(hex: "#6c7086"))
                         .lineLimit(1)
-                        .minimumScaleFactor(Self.minimumScaleFactor)
+                        .minimumScaleFactor(minimumScaleFactor)
                 }
 
                 if let mine = labels.mine {
                     Text(mine)
                         .font(.system(
-                            size: height * 0.14,
+                            size: primaryFontSize,
                             weight: .semibold,
                             design: .monospaced
                         ))
                         .foregroundStyle(Color(hex: "#cdd6f4"))
                         .lineLimit(2)
-                        .minimumScaleFactor(Self.minimumScaleFactor)
+                        .minimumScaleFactor(minimumScaleFactor)
                         .multilineTextAlignment(.center)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(3)
+        .padding(isThumb ? 0.25 : 3)
         .frame(width: width, height: height)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)

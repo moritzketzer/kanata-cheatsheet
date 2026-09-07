@@ -298,6 +298,32 @@ struct KeyboardGeometryLayoutTests {
         }
     }
 
+    @Test("small thumb input paths reserve readable firmware, source, and Mine lines", arguments: [KeyboardHalfSide.left, .right])
+    @MainActor
+    func smallThumbInputPath(_ side: KeyboardHalfSide) {
+        let rect = DefyThumbGeometry(side: side, keySize: 28).keys[6].content
+        #expect(rect.height >= 26)
+        let slot = KeyboardPresentedDefySlot(
+            firmwareKey: "Numpad2", sourceKey: "kp2", mineHoldModifier: nil,
+            key: presentedKey(actionLabel: "Cut")
+        )
+        let labels = KeyboardInputPathLabels.resolve(slot)
+        #expect(labels.firmware == "Numpad2")
+        #expect(labels.source == "kp2")
+        #expect(labels.mine == "Cut")
+        let cell = KeyboardInputPathCell(
+            slot: slot, width: rect.width, height: rect.height - 6,
+            isThumb: true
+        )
+        #expect(cell.primaryFontSize >= 4)
+        #expect(cell.sourceFontSize >= 3.5)
+        #expect(cell.minimumScaleFactor >= 0.85)
+        let host = NSHostingView(rootView: cell.content)
+        host.layoutSubtreeIfNeeded()
+        // AppKit rounds the SwiftUI frame outward to whole points.
+        #expect(host.fittingSize.height <= ceil(rect.height - 6))
+    }
+
     @Test("identified Defy views reserve the full fan and fall back as a pair", arguments: [CGFloat(28), CGFloat(64)])
     @MainActor
     func thumbFanViewSize(_ keySize: CGFloat) {
