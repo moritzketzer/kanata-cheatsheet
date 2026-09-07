@@ -7,7 +7,7 @@ import SwiftUI
 private enum VisualRendererError: Error, CustomStringConvertible {
     case usage
     case missingKeyboardGeometry
-    case unexpectedLayerCount(Int)
+    case noKeyboardLayers
     case renderFailed(String)
     case contactSheetFailed(String)
     case hashMismatch(String)
@@ -19,8 +19,8 @@ private enum VisualRendererError: Error, CustomStringConvertible {
             return "Usage: render-contact-sheets --registry PATH --output DIRECTORY [--width-percent 1...100]"
         case .missingKeyboardGeometry:
             return "Registry has no keyboard geometry profiles"
-        case .unexpectedLayerCount(let count):
-            return "Expected ten keyboard layers, found \(count)"
+        case .noKeyboardLayers:
+            return "Registry has no keyboard layers"
         case .renderFailed(let layer):
             return "Could not render keyboard layer: \(layer)"
         case .contactSheetFailed(let profile):
@@ -88,8 +88,8 @@ private struct VisualRenderer {
         else { throw VisualRendererError.missingKeyboardGeometry }
 
         let layerIds = keyboardLayers.layers.keys.sorted()
-        guard layerIds.count == 10 else {
-            throw VisualRendererError.unexpectedLayerCount(layerIds.count)
+        guard !layerIds.isEmpty else {
+            throw VisualRendererError.noKeyboardLayers
         }
         let profiles = geometry.effectiveProfiles
         guard !profiles.isEmpty else {
@@ -301,7 +301,7 @@ private struct VisualRenderer {
             return (layer, image)
         }
         let columns = 2
-        let rows = 5
+        let rows = (layers.count + columns - 1) / columns
         let outerPadding = 24
         let gutter = 24
         let titleHeight = 72
