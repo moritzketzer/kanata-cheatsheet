@@ -104,6 +104,20 @@ private struct VisualRenderer {
         _ = NSApplication.shared.setActivationPolicy(.prohibited)
         try validateYabaiSymbols(keyboardLayers.layers["yabai"])
 
+        let pomodoroExamples: [(name: String, status: PomodoroStatus?)] = try [
+            ("ready", "idle", "work", "general", 1500, 0),
+            ("running", "running", "work", "dissertation", 222, 720),
+            ("paused", "paused", "work", "dissertation", 222, 720),
+            ("break", "running", "break", "dissertation", 180, 720),
+            ("expired", "expired", "work", "dissertation", -60, 1500),
+            ("target-reached", "paused", "work", "dissertation", 222, 2461),
+        ].map { name, state, mode, context, remaining, progress in
+            let json = """
+            {"schema_version":1,"observed_at":1000,"state":"\(state)","mode":"\(mode)","context":"\(context)","remaining_seconds":\(remaining),"date":"2026-09-08","dissertation_seconds":\(progress)}
+            """
+            return (name, try JSONDecoder().decode(PomodoroStatus.self, from: Data(json.utf8)))
+        } + [("unavailable", nil)]
+
         let display = Config.Display(width_percent: widthPercent)
         var imageRecords: [RenderedImage] = []
         for profile in profiles {
@@ -124,7 +138,10 @@ private struct VisualRenderer {
                     registry: registry,
                     showFreeModifierSpace: false,
                     geometryProfileId: profile.id,
-                    yabaiQualifier: layerId == "yabai" ? "Preview" : nil
+                    yabaiQualifier: layerId == "yabai" ? "Preview" : nil,
+                    pomodoroStatus: layerId == "pomodoro"
+                        ? pomodoroExamples.first { $0.name == "paused" }?.status
+                        : nil
                 )
                 let rendered = try render(view: view, layerId: layerId)
                 let relativePath = "\(profile.id)/\(layerId).png"
@@ -139,6 +156,34 @@ private struct VisualRenderer {
                     height: rendered.height,
                     sha256: sha256(rendered.data)
                 ))
+            }
+
+            if keyboardLayers.layers["pomodoro"] != nil {
+                for example in pomodoroExamples {
+                    let layerId = "pomodoro-\(example.name)"
+                    let view = KeyboardView(
+                        layerName: "pomodoro",
+                        legacyLayer: nil,
+                        display: display,
+                        registry: registry,
+                        geometryProfileId: profile.id,
+                        pomodoroStatus: example.status
+                    )
+                    let rendered = try render(view: view, layerId: layerId)
+                    let relativePath = "\(profile.id)/\(layerId).png"
+                    try writeVerified(
+                        rendered.data,
+                        to: outputURL.appendingPathComponent(relativePath)
+                    )
+                    imageRecords.append(RenderedImage(
+                        path: relativePath,
+                        profileId: profile.id,
+                        layerId: layerId,
+                        width: rendered.width,
+                        height: rendered.height,
+                        sha256: sha256(rendered.data)
+                    ))
+                }
             }
 
             let yabaiStates: [(String, Set<YabaiModifier>)] = [

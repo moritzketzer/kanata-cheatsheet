@@ -5,6 +5,171 @@ import SwiftUI
 
 @Suite("OverlayController Logic", .serialized)
 struct OverlayControllerTests {
+    @Test("Pomodoro reads immediately and refreshes the same panel once per second")
+    @MainActor
+    func pomodoroRefreshPreservesPanel() throws {
+        var reads = 0
+        var status = try JSONDecoder().decode(
+            PomodoroStatus.self, from: Data(pomodoroFixture().utf8)
+        )
+        let controller = OverlayController(
+            config: pomodoroConfig,
+            registryResult: .failure(NSError(domain: "Test", code: 1)),
+            pomodoroStatusReader: { reads += 1; return status }
+        )
+        #expect(reads == 0)
+        controller.handleLayerChange("pomodoro")
+        #expect(reads == 0)
+        controller.handleMessage("cheatsheet-show")
+        defer { controller.handleMessage("cheatsheet-hide") }
+
+        let panel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let keyWindow = NSApplication.shared.keyWindow
+        #expect(reads == 1)
+        #expect(host.rootView.pomodoroStatus == status)
+        #expect(!controller.isModifierTimerRunning)
+
+        // Let AppKit settle its initial window constraints before the first timer tick.
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        let frame = panel.frame
+
+        status = try JSONDecoder().decode(
+            PomodoroStatus.self,
+            from: Data(pomodoroFixture(state: "running", remaining: 221).utf8)
+        )
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.1))
+
+        #expect(reads == 2)
+        #expect(host.rootView.pomodoroStatus == status)
+        #expect(panel === NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
+        #expect(panel.contentView === host)
+        #expect(panel.frame == frame)
+        #expect(NSApplication.shared.keyWindow === keyWindow)
+        #expect(panel.styleMask.contains(.nonactivatingPanel))
+    }
+
+    @Test("Pomodoro stops reading on hide and on replacement", arguments: [false, true])
+    @MainActor
+    func pomodoroStopsReading(replace: Bool) throws {
+        var reads = 0
+        let status = try JSONDecoder().decode(
+            PomodoroStatus.self, from: Data(pomodoroFixture().utf8)
+        )
+        let controller = OverlayController(
+            config: pomodoroConfig,
+            registryResult: .failure(NSError(domain: "Test", code: 1)),
+            pomodoroStatusReader: { reads += 1; return status }
+        )
+        controller.handleMessage("cheatsheet-pin-toggle:pomodoro")
+        #expect(reads == 1)
+
+        if replace {
+            controller.handleConnectionChange(true)
+            controller.handleLayerChange("yabai")
+            #expect(controller.isModifierTimerRunning)
+        } else {
+            controller.handleMessage("cheatsheet-hide")
+        }
+        defer { controller.handleMessage("cheatsheet-hide") }
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.1))
+        #expect(reads == 1)
+
+        if replace {
+            controller.handleLayerChange("pomodoro")
+            #expect(reads == 2)
+            #expect(!controller.isModifierTimerRunning)
+        }
+    }
+
+    @Test("Pomodoro timer does not retain its controller or continue reading after deinit")
+    @MainActor
+    func pomodoroStopsReadingAfterDeinit() throws {
+        var reads = 0
+        var controller: OverlayController? = OverlayController(
+            config: pomodoroConfig,
+            registryResult: .failure(NSError(domain: "Test", code: 1)),
+            pomodoroStatusReader: { reads += 1; return nil }
+        )
+        weak let weakController = controller
+        controller?.handleMessage("cheatsheet-show:pomodoro")
+        let panel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        defer { panel.orderOut(nil) }
+        #expect(reads == 1)
+        controller = nil
+
+        #expect(weakController == nil)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.1))
+        #expect(reads == 1)
+    }
+
+    @Test("missing Pomodoro data replaces previously displayed progress")
+    @MainActor
+    func pomodoroUnavailableReplacesProgress() throws {
+        var status: PomodoroStatus? = try JSONDecoder().decode(
+            PomodoroStatus.self, from: Data(pomodoroFixture().utf8)
+        )
+        let controller = OverlayController(
+            config: pomodoroConfig,
+            registryResult: .failure(NSError(domain: "Test", code: 1)),
+            pomodoroStatusReader: { status }
+        )
+        controller.handleMessage("cheatsheet-show:pomodoro")
+        defer { controller.handleMessage("cheatsheet-hide") }
+        let panel = try #require(
+            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
+        )
+        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        let frame = panel.frame
+        status = nil
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.1))
+
+        #expect(host.rootView.pomodoroStatus == nil)
+        #expect(panel.frame == frame)
+        let header = PomodoroHeaderView(title: "Pomodoro", status: nil, width: 800)
+        #expect(header.statusLine == "Timerstatus nicht verfügbar")
+        #expect(header.progressLine == "Tagesziel Dissertation: 30 Minuten")
+    }
+
+    @Test("Pomodoro header keeps fitting size across all states and both geometries", arguments: ["macbook", "defy"])
+    @MainActor
+    func pomodoroHeaderKeepsFittingSize(profile: String) throws {
+        let statuses: [PomodoroStatus?] = try [
+            pomodoroFixture(state: "idle", remaining: 1500),
+            pomodoroFixture(state: "running"),
+            pomodoroFixture(),
+            pomodoroFixture(state: "running", mode: "break"),
+            pomodoroFixture(state: "expired", remaining: -1),
+            pomodoroFixture(progress: 2461),
+        ].map { try JSONDecoder().decode(PomodoroStatus.self, from: Data($0.utf8)) } + [nil]
+        let sizes = statuses.map { status in
+            NSHostingView(rootView: KeyboardView(
+                layerName: "pomodoro",
+                legacyLayer: nil,
+                display: pomodoroConfig.display,
+                registry: geometryProfileRegistry(includePomodoro: true),
+                geometryProfileId: profile,
+                pomodoroStatus: status
+            )).fittingSize
+        }
+        #expect(sizes.allSatisfy { $0 == sizes[0] })
+    }
+
+    private var pomodoroConfig: Config {
+        Config(
+            display: Config.Display(delay_ms: 0, fade_in_ms: 0, fade_out_ms: 0, width_percent: 75),
+            layers: [
+                "pomodoro": Config.Layer(label: "Pomodoro", trigger: "manual", groups: [:]),
+                "yabai": Config.Layer(label: "Yabai", trigger: "manual", groups: [:]),
+            ]
+        )
+    }
+
     private var appsConfig: Config {
         Config(
             display: Config.Display(delay_ms: 100),
@@ -1560,7 +1725,8 @@ struct OverlayControllerTests {
 
     private func geometryProfileRegistry(
         trigger: String = "manual",
-        includeMine: Bool = true
+        includeMine: Bool = true,
+        includePomodoro: Bool = false
     ) -> KeybindingRegistry {
         let position = RegistryKeyboardPosition(
             position: "KeyO",
@@ -1643,6 +1809,16 @@ struct OverlayControllerTests {
             layers["mine"] = RegistryKeyboardLayer(
                 id: "mine",
                 label: "Mine",
+                trigger: "manual",
+                overlayGroup: nil,
+                groups: [],
+                cells: [:]
+            )
+        }
+        if includePomodoro {
+            layers["pomodoro"] = RegistryKeyboardLayer(
+                id: "pomodoro",
+                label: "Pomodoro",
                 trigger: "manual",
                 overlayGroup: nil,
                 groups: [],

@@ -55,6 +55,7 @@ struct KeyboardView: View {
     let showInputPath: Bool
     let activeModifiers: Set<YabaiModifier>
     let yabaiQualifier: String?
+    let pomodoroStatus: PomodoroStatus?
 
     let keySize: CGFloat
     let contentWidth: CGFloat
@@ -69,7 +70,8 @@ struct KeyboardView: View {
         geometryProfileId: String? = nil,
         showInputPath: Bool = false,
         activeModifiers: Set<YabaiModifier> = [],
-        yabaiQualifier: String? = nil
+        yabaiQualifier: String? = nil,
+        pomodoroStatus: PomodoroStatus? = nil
     ) {
         let presentation = KeyboardLayerProjector.presentation(
             layerName: layerName,
@@ -126,6 +128,7 @@ struct KeyboardView: View {
         self.showInputPath = showInputPath
         self.activeModifiers = activeModifiers
         self.yabaiQualifier = yabaiQualifier
+        self.pomodoroStatus = pomodoroStatus
         self.keySize = max(28, calculatedKeySize)
         self.contentWidth = contentWidth
     }
@@ -147,6 +150,12 @@ struct KeyboardView: View {
                         .frame(height: 11)
                         .accessibilityHidden(yabaiQualifier == nil)
                 }
+            } else if presentation.name == "pomodoro" {
+                PomodoroHeaderView(
+                    title: presentation.label,
+                    status: pomodoroStatus,
+                    width: contentWidth
+                )
             } else {
                 Text(presentation.label)
                     .font(.system(size: 16, weight: .bold, design: .monospaced))
@@ -250,6 +259,45 @@ struct KeyboardView: View {
                 contentWidth: contentWidth
             )
         }
+    }
+}
+
+
+@available(macOS 14, *)
+struct PomodoroHeaderView: View {
+    let title: String
+    let status: PomodoroStatus?
+    let width: CGFloat
+
+    var statusLine: String {
+        status?.statusLine ?? "Timerstatus nicht verfügbar"
+    }
+
+    var progressLine: String {
+        status?.progressLine ?? "Tagesziel Dissertation: 30 Minuten"
+    }
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Text(title)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(hex: "#cba6f7"))
+                .tracking(4)
+                .textCase(.uppercase)
+
+            Text(statusLine)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color(hex: status == nil ? "#6c7086" : "#cdd6f4"))
+                .frame(height: 16)
+
+            Text(progressLine)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Color(hex: status == nil ? "#6c7086" : "#bac2de"))
+                .frame(height: 14)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .frame(width: width)
     }
 }
 

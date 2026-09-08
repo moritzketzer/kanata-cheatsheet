@@ -347,10 +347,13 @@ final class OverlayController {
     private let logic: OverlayLogic
     private let defaults: UserDefaults
     private let modifierFlags: () -> UInt
+    private let pomodoroStatusReader: () -> PomodoroStatus?
     private var panel: OverlayPanel?
     private var hostView: NSHostingView<KeyboardView>?
     private var delayTimer: Timer?
     private var modifierTimer: Timer?
+    private var pomodoroTimer: Timer?
+    private var pomodoroStatus: PomodoroStatus?
     private var currentLayer: String?
 
     var isModifierTimerRunning: Bool { modifierTimer != nil }
@@ -359,12 +362,14 @@ final class OverlayController {
         config: Config,
         registryResult: Result<KeybindingRegistry, Error>,
         defaults: UserDefaults = .standard,
-        modifierFlags: @escaping () -> UInt = { NSEvent.modifierFlags.rawValue }
+        modifierFlags: @escaping () -> UInt = { NSEvent.modifierFlags.rawValue },
+        pomodoroStatusReader: @escaping () -> PomodoroStatus? = { PomodoroStatus.read() }
     ) {
         self.config = config
         self.registry = try? registryResult.get()
         self.defaults = defaults
         self.modifierFlags = modifierFlags
+        self.pomodoroStatusReader = pomodoroStatusReader
         let storedProfileId = defaults.string(
             forKey: KeyboardGeometrySelection.defaultsKey
         )
@@ -387,6 +392,7 @@ final class OverlayController {
     deinit {
         delayTimer?.invalidate()
         modifierTimer?.invalidate()
+        pomodoroTimer?.invalidate()
     }
 
     func handleLayerChange(_ layer: String) {
@@ -431,7 +437,10 @@ final class OverlayController {
         _ action: OverlayAction,
         refitRefresh: Bool = true
     ) {
-        defer { synchronizeModifierTimer() }
+        defer {
+            synchronizeModifierTimer()
+            synchronizePomodoroTimer()
+        }
         switch action {
         case .startDelay:
             delayTimer?.invalidate()
@@ -496,6 +505,29 @@ final class OverlayController {
         }
     }
 
+    private func synchronizePomodoroTimer() {
+        guard currentLayer == "pomodoro", panel != nil else {
+            pomodoroTimer?.invalidate()
+            pomodoroTimer = nil
+            return
+        }
+        guard pomodoroTimer == nil else { return }
+        pomodoroTimer = Timer.scheduledTimer(
+            withTimeInterval: 1,
+            repeats: true
+        ) { [weak self] _ in
+            self?.samplePomodoroStatus()
+        }
+    }
+
+    private func samplePomodoroStatus() {
+        guard currentLayer == "pomodoro", panel != nil else { return }
+        let status = pomodoroStatusReader()
+        guard status != pomodoroStatus else { return }
+        pomodoroStatus = status
+        refreshOverlay(refit: false)
+    }
+
     private func showOverlay(for layerName: String) {
         guard KeyboardLayerProjector.presentation(
             layerName: layerName,
@@ -509,6 +541,7 @@ final class OverlayController {
 
         hideOverlay()
         currentLayer = layerName
+        pomodoroStatus = layerName == "pomodoro" ? pomodoroStatusReader() : nil
 
         let screen = NSScreen.main ?? NSScreen.screens[0]
 
@@ -542,7 +575,8 @@ final class OverlayController {
             geometryProfileId: logic.selectedGeometryProfileId,
             showInputPath: logic.showsInputPath(for: layerName),
             activeModifiers: logic.activeModifiers,
-            yabaiQualifier: logic.yabaiQualifier
+            yabaiQualifier: logic.yabaiQualifier,
+            pomodoroStatus: pomodoroStatus
         )
     }
 
@@ -566,6 +600,7 @@ final class OverlayController {
             let panel
         else { return }
         currentLayer = layerName
+        pomodoroStatus = layerName == "pomodoro" ? pomodoroStatusReader() : nil
         hostView.rootView = makeKeyboardView(layerName: layerName)
 
         let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
@@ -593,6 +628,9 @@ final class OverlayController {
     }
 
     private func hideOverlay() {
+        pomodoroTimer?.invalidate()
+        pomodoroTimer = nil
+        pomodoroStatus = nil
         guard let panel = self.panel else { return }
         currentLayer = nil
 
