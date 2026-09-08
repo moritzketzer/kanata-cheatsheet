@@ -83,6 +83,9 @@ struct KeyboardGeometryMetrics: Equatable {
     static let defyMainRowCounts = [7, 7, 7, 7]
     static let defyTopThumbCount = 4
     static let defyBottomThumbCount = 4
+    static let defyHalfWidthUnits: CGFloat = 536.0 / 68
+    // The narrowest thumb must fit its ID and three diagnostic text lines.
+    static let defyInputPathMinimumKeySize: CGFloat = 64
 
     let keySize: CGFloat
     let spacing: CGFloat
@@ -93,6 +96,15 @@ struct KeyboardGeometryMetrics: Equatable {
     var defyTopThumbHeight: CGFloat { keySize * 0.9 }
     var defyBottomThumbHeight: CGFloat { keySize * 0.78 }
     var defyCenterGap: CGFloat { keySize * 1.35 }
+    // Measured main key = 68 reference units; the thumb origin includes
+    // 28 units of additional vertical space from the approved polish.
+    var defyMainSpacing: CGFloat { keySize * 2 / 68 }
+    var defyMainWidth: CGFloat { keySize * 488 / 68 }
+    var defyHalfWidth: CGFloat { keySize * Self.defyHalfWidthUnits }
+    var defyHalfHeight: CGFloat { keySize * 549 / 68 }
+    var defyThumbOrigin: CGPoint {
+        CGPoint(x: keySize * 206 / 68, y: keySize * 325 / 68)
+    }
 
     func macBookKeyWidths(
         unitWidths: [Double],
@@ -109,8 +121,9 @@ struct KeyboardGeometryMetrics: Equatable {
     }
 
     func defyColumnOffsets(for side: KeyboardHalfSide) -> [CGFloat] {
-        let left = [0.18, 0.12, 0.05, 0, 0.03, 0.10, 0.16].map {
-            keySize * $0
+        let pixels: [CGFloat] = [41, 41, 15, 0, 15, 15, 51]
+        let left = pixels.map {
+            keySize * $0 / 68
         }
         return side == .left ? left : Array(left.reversed())
     }
@@ -247,25 +260,30 @@ struct DefyGeometryView: View {
         }
     }
 
+    @ViewBuilder
     private func half(
         _ half: KeyboardPresentedDefyHalf,
         side: KeyboardHalfSide
     ) -> some View {
-        VStack(spacing: metrics.keySize * 0.2) {
-            mainBody(half, side: side)
-            if DefyThumbGeometry.isIdentified(left: left.thumbs, right: right.thumbs) {
+        if DefyThumbGeometry.isIdentified(left: left.thumbs, right: right.thumbs) {
+            let thumbs = DefyThumbGeometry(side: side, keySize: metrics.keySize)
+            ZStack(alignment: .topLeading) {
+                mainBody(half, side: side)
+                    .offset(x: side == .left ? 0 : metrics.defyHalfWidth - metrics.defyMainWidth)
                 DefyThumbFan(
-                    thumbs: half.thumbs,
-                    side: side,
-                    source: source,
-                    keySize: metrics.keySize,
-                    showInputPath: showInputPath
+                    thumbs: half.thumbs, side: side, source: source,
+                    keySize: metrics.keySize, showInputPath: showInputPath
                 )
-                .frame(
-                    width: metrics.keySize * 7 + metrics.spacing * 6,
-                    alignment: side == .left ? .trailing : .leading
+                .offset(
+                    x: side == .left ? metrics.defyThumbOrigin.x
+                        : metrics.defyHalfWidth - metrics.defyThumbOrigin.x - thumbs.size.width,
+                    y: metrics.defyThumbOrigin.y
                 )
-            } else {
+            }
+            .frame(width: metrics.defyHalfWidth, height: metrics.defyHalfHeight, alignment: .topLeading)
+        } else {
+            VStack(spacing: metrics.keySize * 0.2) {
+                mainBody(half, side: side)
                 thumbCluster(half.thumbs, side: side)
             }
         }
@@ -276,9 +294,9 @@ struct DefyGeometryView: View {
         side: KeyboardHalfSide
     ) -> some View {
         let offsets = metrics.defyColumnOffsets(for: side)
-        let width = metrics.keySize * 7 + metrics.spacing * 6
+        let width = metrics.defyMainWidth
         let height = metrics.keySize * 4
-            + metrics.spacing * 3
+            + metrics.defyMainSpacing * 3
             + (offsets.max() ?? 0)
 
         return ZStack(alignment: .topLeading) {
@@ -291,8 +309,8 @@ struct DefyGeometryView: View {
                             height: metrics.keySize
                         )
                         .offset(
-                            x: CGFloat(column) * (metrics.keySize + metrics.spacing),
-                            y: CGFloat(row) * (metrics.keySize + metrics.spacing)
+                            x: CGFloat(column) * (metrics.keySize + metrics.defyMainSpacing),
+                            y: CGFloat(row) * (metrics.keySize + metrics.defyMainSpacing)
                                 + offsets[column]
                         )
                     }

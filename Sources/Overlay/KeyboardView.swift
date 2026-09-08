@@ -106,11 +106,10 @@ struct KeyboardView: View {
                 contentWidth - CGFloat(max(0, gapCount)) * Self.keySpacing
             ) / max(1, maxUnits)
         case .defy:
-            let keyUnits: CGFloat = 14 + 1.35
-            let withinHalfGaps: CGFloat = 12
-            calculatedKeySize = (
-                contentWidth - withinHalfGaps * Self.keySpacing
-            ) / keyUnits
+            calculatedKeySize = max(
+                showInputPath ? KeyboardGeometryMetrics.defyInputPathMinimumKeySize : 28,
+                contentWidth / (2 * KeyboardGeometryMetrics.defyHalfWidthUnits + 1.35)
+            )
         case .legacy(let rows, _, _):
             let maxRowUnits = rows.map { row in
                 CGFloat(row.map(\.width).reduce(0, +))

@@ -224,7 +224,10 @@ struct KeyboardGeometryLayoutTests {
 
         #expect(left.count == 7)
         #expect(right == Array(left.reversed()))
-        #expect(Set(left).count > 2)
+        #expect(left == [41, 41, 15, 0, 15, 15, 51].map { CGFloat($0) * 48 / 68 })
+        #expect(metrics.defyMainSpacing == CGFloat(48) * 2 / 68)
+        // The main field above LT1/LT2 ends at reference y=293.
+        #expect(metrics.defyThumbOrigin.y - CGFloat(293) * 48 / 68 > 20)
     }
 
     @Test("Defy fan requires all sixteen IDs in physical array order")
@@ -279,7 +282,7 @@ struct KeyboardGeometryLayoutTests {
         for geometry in [left, right] {
             for key in geometry.keys {
                 let rect = key.content
-                #expect(rect.height >= 20)
+                #expect(rect.width > 0 && rect.height > 0)
                 for x in [rect.minX, rect.maxX] {
                     for y in [rect.minY, rect.maxY] {
                         #expect(key.path.contains(CGPoint(x: x, y: y)), "\(key.id) content corner")
@@ -297,24 +300,48 @@ struct KeyboardGeometryLayoutTests {
         }
     }
 
-    @Test("Defy thumbs use the approved compact silhouette", arguments: [CGFloat(28), CGFloat(64)])
-    func compactThumbSilhouette(_ keySize: CGFloat) {
-        let geometry = DefyThumbGeometry(side: .left, keySize: keySize)
-        #expect(geometry.size.width / geometry.size.height >= 1.20)
-        #expect(geometry.size.width / geometry.size.height <= 1.30)
-        #expect(geometry.keys[7].path.boundingRect.height < geometry.size.height * 0.38)
-        for key in geometry.keys {
-            var curves = 0
-            key.path.forEach { if case .quadCurve = $0 { curves += 1 } }
-            #expect(curves == key.outline.count)
+    @Test("Defy thumbs preserve the measured proportions and straight LT1 top")
+    func measuredThumbSilhouette() {
+        let geometry = DefyThumbGeometry(side: .left, keySize: 68)
+        #expect(geometry.size.width / geometry.size.height > 1.40)
+        #expect(geometry.size.width / geometry.size.height < 1.55)
+        let top = geometry.keys[0].outline.filter { $0.y < 2 }
+        #expect(top.map(\.x).max()! - top.map(\.x).min()! > 85)
+    }
+
+    @Test("adjacent thumb outlines preserve six-unit seams")
+    func uniformThumbSeams() {
+        let keys = DefyThumbGeometry(side: .left, keySize: 68).keys
+        func distance(_ point: CGPoint, to a: CGPoint, _ b: CGPoint) -> CGFloat {
+            let dx = b.x - a.x, dy = b.y - a.y
+            let lengthSquared = dx * dx + dy * dy
+            let fraction = max(0, min(1,
+                ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared
+            ))
+            return hypot(point.x - a.x - fraction * dx, point.y - a.y - fraction * dy)
+        }
+        for (first, second) in [(0, 1), (1, 2), (2, 3), (0, 4), (1, 5),
+                                (2, 6), (3, 6), (3, 7), (4, 5), (5, 6), (6, 7)] {
+            let a = keys[first].outline, b = keys[second].outline
+            var gap = CGFloat.infinity
+            for (points, edges) in [(a, b), (b, a)] {
+                for point in points {
+                    for index in edges.indices {
+                        gap = min(gap, distance(point, to: edges[index], edges[(index + 1) % edges.count]))
+                    }
+                }
+            }
+            #expect(abs(gap - 6) < 0.1, "LT\(first + 1) / LT\(second + 1) gap = \(gap)")
         }
     }
 
     @Test("small thumb input paths reserve readable firmware, source, and Mine lines", arguments: [KeyboardHalfSide.left, .right])
     @MainActor
     func smallThumbInputPath(_ side: KeyboardHalfSide) {
-        let rect = DefyThumbGeometry(side: side, keySize: 28).keys[6].content
-        #expect(rect.height >= 26)
+        let keySize = KeyboardGeometryMetrics.defyInputPathMinimumKeySize
+        let rect = DefyThumbGeometry(side: side, keySize: keySize).keys[3].content
+        let labelHeight = max(6, keySize * 0.13)
+        #expect(rect.height - labelHeight >= 20)
         let slot = KeyboardPresentedDefySlot(
             firmwareKey: "Numpad2", sourceKey: "kp2", mineHoldModifier: nil,
             key: presentedKey(actionLabel: "Cut")
@@ -324,7 +351,7 @@ struct KeyboardGeometryLayoutTests {
         #expect(labels.source == "kp2")
         #expect(labels.mine == "Cut")
         let cell = KeyboardInputPathCell(
-            slot: slot, width: rect.width, height: rect.height - 6,
+            slot: slot, width: rect.width, height: rect.height - labelHeight,
             isThumb: true
         )
         #expect(cell.primaryFontSize >= 4)
@@ -333,7 +360,7 @@ struct KeyboardGeometryLayoutTests {
         let host = NSHostingView(rootView: cell.content)
         host.layoutSubtreeIfNeeded()
         // AppKit rounds the SwiftUI frame outward to whole points.
-        #expect(host.fittingSize.height <= ceil(rect.height - 6))
+        #expect(host.fittingSize.height <= ceil(rect.height - labelHeight))
     }
 
     @Test("identified Defy views reserve the full fan and fall back as a pair", arguments: [CGFloat(28), CGFloat(64)])
@@ -365,8 +392,14 @@ struct KeyboardGeometryLayoutTests {
             }
             let legacy = size(false, false)
             let fan = size(true, true)
-            #expect(fan.height > legacy.height + keySize)
-            #expect(abs(fan.width - legacy.width) < 0.001)
+            let metrics = KeyboardGeometryMetrics(keySize: keySize, spacing: 4)
+            #expect(fan.height >= metrics.defyHalfHeight)
+            #expect(abs(fan.width - (2 * metrics.defyHalfWidth + metrics.defyCenterGap)) <= 1)
+            for side in [KeyboardHalfSide.left, .right] {
+                let geometry = DefyThumbGeometry(side: side, keySize: keySize)
+                let bottom = geometry.keys.map { $0.path.boundingRect.maxY }.max()!
+                #expect(metrics.defyThumbOrigin.y + bottom <= metrics.defyHalfHeight)
+            }
             #expect(size(true, false) == legacy)
             #expect(size(false, true) == legacy)
         }
