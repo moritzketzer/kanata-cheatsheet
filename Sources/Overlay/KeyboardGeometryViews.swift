@@ -122,8 +122,9 @@ struct KeyboardGeometryMetrics: Equatable {
 
     func defyColumnOffsets(for side: KeyboardHalfSide) -> [CGFloat] {
         let pixels: [CGFloat] = [41, 41, 15, 0, 15, 15, 51]
+        // Retain 40% of the physical stagger so rows are easier to scan.
         let left = pixels.map {
-            keySize * $0 / 68
+            keySize * $0 / 68 * 0.4
         }
         return side == .left ? left : Array(left.reversed())
     }

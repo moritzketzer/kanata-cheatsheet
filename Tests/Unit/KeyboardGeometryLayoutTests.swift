@@ -216,7 +216,7 @@ struct KeyboardGeometryLayoutTests {
         #expect(host.fittingSize.height <= height)
     }
 
-    @Test("Defy column stagger mirrors across the center gap")
+    @Test("Defy column stagger is softened to forty percent and mirrors across the center gap")
     func defyColumnStaggerMirrors() {
         let metrics = KeyboardGeometryMetrics(keySize: 48, spacing: 4)
         let left = metrics.defyColumnOffsets(for: .left)
@@ -224,10 +224,12 @@ struct KeyboardGeometryLayoutTests {
 
         #expect(left.count == 7)
         #expect(right == Array(left.reversed()))
-        #expect(left == [41, 41, 15, 0, 15, 15, 51].map { CGFloat($0) * 48 / 68 })
+        let measuredOffsets: [CGFloat] = [41, 41, 15, 0, 15, 15, 51]
+        let expected = measuredOffsets.map { $0 * 48 / 68 * 0.4 }
+        #expect(left == expected)
         #expect(metrics.defyMainSpacing == CGFloat(48) * 2 / 68)
-        // The main field above LT1/LT2 ends at reference y=293.
-        #expect(metrics.defyThumbOrigin.y - CGFloat(293) * 48 / 68 > 20)
+        let mainBottom = metrics.keySize * 4 + metrics.defyMainSpacing * 3 + left[4]
+        #expect(metrics.defyThumbOrigin.y - mainBottom > 20)
     }
 
     @Test("Defy fan requires all sixteen IDs in physical array order")
