@@ -311,6 +311,7 @@ struct KeyCell: View {
     let height: CGFloat
     var physicalId: String? = nil
     var showsShell: Bool = true
+    var uniformThumbLayout: Bool = false
 
     @Environment(\.isYabaiLayer) private var isYabaiLayer
 
@@ -403,6 +404,7 @@ struct KeyCell: View {
             VStack(spacing: physicalId == nil ? 3 : 1) {
                 Spacer(minLength: physicalId == nil ? 5 : 0)
                 primaryContent
+                    .frame(height: uniformThumbLayout ? height * 0.38 : nil)
                 if let explanation = key.explanation {
                     Text(explanation)
                         .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .medium))
@@ -446,6 +448,7 @@ struct KeyCell: View {
             VStack(spacing: physicalId == nil ? 3 : 0) {
                 Spacer(minLength: physicalId == nil ? 5 : 0)
                 primaryContent
+                    .frame(height: uniformThumbLayout ? height * 0.38 : nil)
                 if let explanation = key.explanation {
                     Text(explanation)
                         .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .medium))

@@ -423,12 +423,12 @@ private struct DefyThumbFan: View {
         switch DefySlotRenderKind(slot: slot, showInputPath: showInputPath) {
         case .key(let key):
             let cell = KeyCell(
-                key: key, source: source, width: rect.width, height: rect.height,
-                physicalId: geometry.id, showsShell: false
+                key: key, source: source, width: keySize * 0.78, height: keySize * 0.72,
+                physicalId: geometry.id, showsShell: false, uniformThumbLayout: true
             )
             geometry.path.fill(cell.fillColor)
             geometry.path.stroke(cell.strokeColor, lineWidth: 1)
-            cell.position(x: rect.midX, y: rect.midY)
+            cell.position(x: geometry.areaCenter.x, y: geometry.areaCenter.y)
                 .accessibilityElement(children: .combine)
         case .inputPath(let slot):
             let labelHeight = max(6, keySize * 0.13)

@@ -274,6 +274,9 @@ struct KeyboardGeometryLayoutTests {
         #expect(left.keys[0].path.boundingRect.width > left.keys[1].path.boundingRect.width)
         for (l, r) in zip(left.keys, right.keys) {
             #expect(abs(l.content.midX + r.content.midX - left.size.width) < 0.001)
+            #expect(abs(l.areaCenter.x + r.areaCenter.x - left.size.width) < 0.001)
+            #expect(abs(l.areaCenter.y - r.areaCenter.y) < 0.001)
+            #expect(l.path.contains(l.areaCenter) && r.path.contains(r.areaCenter))
             #expect(l.content.size == r.content.size)
             #expect(l.content.minY == r.content.minY)
             for (lp, rp) in zip(l.outline, r.outline) {
@@ -309,6 +312,44 @@ struct KeyboardGeometryLayoutTests {
         #expect(geometry.size.width / geometry.size.height < 1.55)
         let top = geometry.keys[0].outline.filter { $0.y < 2 }
         #expect(top.map(\.x).max()! - top.map(\.x).min()! > 85)
+    }
+
+    @Test("upper and lower thumb depths balance across the curved middle seam")
+    func balancedThumbDepths() throws {
+        let keys = DefyThumbGeometry(side: .left, keySize: 68).keys
+        // Fixed normal sections from the original seam make the comparison
+        // independent of vertex ordering in the adjusted outlines.
+        let sections: [(Int, Int, CGPoint, CGPoint)] = [
+            (0, 4, CGPoint(x: 50.515764, y: 65.129576), CGPoint(x: 0.005247653, y: -0.999986231)),
+            (1, 5, CGPoint(x: 132.451208, y: 68.476672), CGPoint(x: 0.150400271, y: -0.988625186)),
+            (2, 6, CGPoint(x: 194.034524, y: 82.628424), CGPoint(x: 0.344858510, y: -0.938654680)),
+            (3, 6, CGPoint(x: 242.880828, y: 113.021704), CGPoint(x: 0.731115835, y: -0.682253351)),
+        ]
+        func cross(_ a: CGPoint, _ b: CGPoint) -> CGFloat { a.x * b.y - a.y * b.x }
+        func depth(_ outline: [CGPoint], at origin: CGPoint, direction: CGPoint) throws -> CGFloat {
+            var intersections: [CGFloat] = []
+            for index in outline.indices {
+                let a = outline[index], b = outline[(index + 1) % outline.count]
+                let edge = CGPoint(x: b.x - a.x, y: b.y - a.y)
+                let denominator = cross(direction, edge)
+                if abs(denominator) < 0.000001 { continue }
+                let offset = CGPoint(x: a.x - origin.x, y: a.y - origin.y)
+                let fraction = cross(offset, direction) / denominator
+                if (0...1).contains(fraction) {
+                    intersections.append(cross(offset, edge) / denominator)
+                }
+            }
+            #expect(intersections.count >= 2)
+            let minimum = try #require(intersections.min())
+            let maximum = try #require(intersections.max())
+            return maximum - minimum
+        }
+        for (upper, lower, origin, direction) in sections {
+            let a = try depth(keys[upper].outline, at: origin, direction: direction)
+            let b = try depth(keys[lower].outline, at: origin, direction: direction)
+            #expect(a > 0 && b > 0)
+            #expect(abs(a - b) / min(a, b) < 0.01, "LT\(upper + 1) / LT\(lower + 1): \(a) / \(b)")
+        }
     }
 
     @Test("adjacent thumb outlines preserve six-unit seams")
