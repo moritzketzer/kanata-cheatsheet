@@ -27,21 +27,52 @@ private struct LayerFooterSectionView: View {
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Color(hex: "#bac2de"))
 
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
-                GridRow {
-                    ForEach(Array(section.columns.enumerated()), id: \.offset) { _, column in
-                        cell(column, weight: .semibold, color: Color(hex: "#cba6f7"))
+            if section.id == "global-actions" {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 180), spacing: 8)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(row.first ?? "")
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(Color(hex: "#cba6f7"))
+                            Text(row.dropFirst().first ?? "")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(Color(hex: "#bac2de"))
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(hex: "#cba6f7").opacity(0.10))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color(hex: "#cba6f7").opacity(0.18), lineWidth: 1)
+                        )
                     }
                 }
-                ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
+            } else {
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
                     GridRow {
-                        ForEach(Array(row.enumerated()), id: \.offset) { _, value in
-                            cell(value, weight: .regular, color: Color(hex: "#6c7086"))
+                        ForEach(Array(section.columns.enumerated()), id: \.offset) { _, column in
+                            cell(column, weight: .semibold, color: Color(hex: "#cba6f7"))
+                        }
+                    }
+                    ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
+                        GridRow {
+                            ForEach(Array(row.enumerated()), id: \.offset) { _, value in
+                                cell(value, weight: .regular, color: Color(hex: "#6c7086"))
+                            }
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

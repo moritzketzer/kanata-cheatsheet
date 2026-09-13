@@ -72,7 +72,7 @@ struct RegistryBrowserView: View {
                 ModifierSpaceBrowserGrid(
                     registry: registry,
                     matchingBindingIDs: Set(filteredBindings(registry).map(\.id)),
-                    freeOnly: false
+                    unrecordedOnly: false
                 )
             } else {
                 bindingList(registry)
@@ -287,11 +287,11 @@ private struct InspectorValue: View {
 private struct ModifierSpaceBrowserGrid: View {
     let registry: KeybindingRegistry
     let matchingBindingIDs: Set<String>
-    let freeOnly: Bool
+    let unrecordedOnly: Bool
 
     private var slots: [ModifierSpaceSlot] {
-        freeOnly
-            ? registry.views.modifierSpace.slots.filter(\.isFree)
+        unrecordedOnly
+            ? registry.views.modifierSpace.slots.filter(\.isUnrecorded)
             : registry.views.modifierSpace.slots
     }
 
@@ -306,9 +306,9 @@ private struct ModifierSpaceBrowserGrid: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(slot.display)
                             .font(.system(size: 17, weight: .bold, design: .monospaced))
-                            .foregroundStyle(slot.isFree ? .secondary : Color(hex: "#cba6f7"))
-                        if slot.isFree {
-                            Text("Free")
+                            .foregroundStyle(slot.isUnrecorded ? .secondary : Color(hex: "#cba6f7"))
+                        if slot.isUnrecorded {
+                            Text("Not recorded")
                                 .foregroundStyle(.tertiary)
                         } else {
                             ForEach(bindings) { binding in
@@ -331,7 +331,7 @@ private struct ModifierSpaceBrowserGrid: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
                     .padding(14)
-                    .background(.quaternary.opacity(slot.isFree ? 0.35 : 0.7), in: RoundedRectangle(cornerRadius: 10))
+                    .background(.quaternary.opacity(slot.isUnrecorded ? 0.35 : 0.7), in: RoundedRectangle(cornerRadius: 10))
                 }
             }
             .padding(20)

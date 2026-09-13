@@ -42,6 +42,28 @@ struct LayerFooterViewTests {
         #expect(size.height > 0)
     }
 
+    @Test("ten global actions form a compact overview at laptop width")
+    @MainActor
+    func globalActionsFitCompactOverview() {
+        let globalFooter = RegistryLayerFooter(sections: [
+            RegistryLayerFooterSection(
+                id: "global-actions",
+                title: "Suchen, Wechseln, Erfassen",
+                columns: ["Shortcut", "Aktion"],
+                rows: (0..<10).map { index in
+                    ["Control + Space \(index)", "Switch Windows from Active App"]
+                }
+            ),
+        ])
+        let host = NSHostingView(rootView: LayerFooterView(
+            footer: globalFooter, availableWidth: 980
+        ))
+
+        #expect(host.fittingSize.width <= 980.5)
+        #expect(host.fittingSize.height > 0)
+        #expect(host.fittingSize.height <= 170)
+    }
+
     @Test("keyboard footer adds height without horizontal overflow")
     @MainActor
     func keyboardFooterFitsOverlay() {
@@ -65,7 +87,60 @@ struct LayerFooterViewTests {
         #expect(withFooter.fittingSize.width <= targetWidth + 0.5)
     }
 
-    private func registry(footer: RegistryLayerFooter?) -> KeybindingRegistry {
+    @Test("Mine renders its global actions footer within the overlay")
+    @MainActor
+    func mineGlobalActionsFooterFitsOverlay() {
+        let display = Config.Display(width_percent: 75)
+        let globalFooter = RegistryLayerFooter(sections: [
+            RegistryLayerFooterSection(
+                id: "global-actions",
+                title: "Global actions",
+                columns: ["Keys", "Action"],
+                rows: [["Control + Space", "Raycast"]]
+            ),
+        ])
+        let withoutFooter = NSHostingView(rootView: KeyboardView(
+            layerName: "mine", legacyLayer: nil, display: display,
+            registry: registry(footer: nil, layerName: "mine")
+        ))
+        let view = KeyboardView(
+            layerName: "mine", legacyLayer: nil, display: display,
+            registry: registry(footer: globalFooter, layerName: "mine")
+        )
+        let withFooter = NSHostingView(rootView: view)
+
+        #expect(view.presentation.footer == globalFooter)
+        #expect(withFooter.fittingSize.height > withoutFooter.fittingSize.height)
+        #expect(withFooter.fittingSize.width <= withoutFooter.fittingSize.width + 0.5)
+    }
+
+    @Test("Apps does not render global modifier-space slots")
+    @MainActor
+    func appsDoesNotRenderGlobalModifierSpace() {
+        let display = Config.Display(width_percent: 75)
+        let slots = (0..<15).map { index in
+            ModifierSpaceSlot(
+                modifiers: [], display: "Shortcut \(index)",
+                state: "occupied", bindingIds: []
+            )
+        }
+        let withoutSlots = NSHostingView(rootView: KeyboardView(
+            layerName: "apps", legacyLayer: nil, display: display,
+            registry: registry(footer: nil, layerName: "apps")
+        ))
+        let withSlots = NSHostingView(rootView: KeyboardView(
+            layerName: "apps", legacyLayer: nil, display: display,
+            registry: registry(footer: nil, layerName: "apps", slots: slots)
+        ))
+
+        #expect(withSlots.fittingSize == withoutSlots.fittingSize)
+    }
+
+    private func registry(
+        footer: RegistryLayerFooter?,
+        layerName: String = "yabai",
+        slots: [ModifierSpaceSlot] = []
+    ) -> KeybindingRegistry {
         let rows = (0..<5).map { row in
             (0..<14).map { column in
                 RegistryKeyboardPosition(
@@ -86,7 +161,7 @@ struct LayerFooterViewTests {
                 modifierSpace: ModifierSpaceView(
                     id: "modifier-space",
                     label: "Modifier + Space",
-                    slots: []
+                    slots: slots
                 ),
                 allBindings: AllBindingsView(
                     id: "all-bindings",
@@ -101,9 +176,9 @@ struct LayerFooterViewTests {
                         rows: rows
                     ),
                     layers: [
-                        "yabai": RegistryKeyboardLayer(
-                            id: "yabai",
-                            label: "Yabai",
+                        layerName: RegistryKeyboardLayer(
+                            id: layerName,
+                            label: layerName.capitalized,
                             trigger: "manual",
                             overlayGroup: nil,
                             showBaseKeys: true,

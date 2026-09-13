@@ -3,6 +3,27 @@ import Testing
 
 @Suite("Registry Browser")
 struct RegistryBrowserTests {
+    @Test("uncatalogued modifier-space slots are unrecorded, including legacy registries",
+          arguments: ["unrecorded", "free"])
+    func recognizesUnrecordedSlots(state: String) {
+        let slot = ModifierSpaceSlot(
+            modifiers: ["ctrl"], display: "Control + Space",
+            state: state, bindingIds: []
+        )
+
+        #expect(slot.isUnrecorded)
+    }
+
+    @Test("recorded modifier-space slots retain their occupied state")
+    func recognizesRecordedSlot() {
+        let slot = ModifierSpaceSlot(
+            modifiers: ["ctrl"], display: "Control + Space",
+            state: "occupied", bindingIds: ["raycast.open"]
+        )
+
+        #expect(!slot.isUnrecorded)
+    }
+
     @Test("registry-open routes to browser")
     func routesRegistryOpen() {
         #expect(AppMessageRouter.route("registry-open") == .openRegistry)

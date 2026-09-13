@@ -50,8 +50,6 @@ private extension EnvironmentValues {
 struct KeyboardView: View {
     let presentation: KeyboardLayerPresentation
     let config: Config.Display
-    let registry: KeybindingRegistry?
-    let showFreeModifierSpace: Bool
     let showInputPath: Bool
     let activeModifiers: Set<YabaiModifier>
     let yabaiQualifier: String?
@@ -123,8 +121,6 @@ struct KeyboardView: View {
 
         self.presentation = presentation
         self.config = display
-        self.registry = registry
-        self.showFreeModifierSpace = showFreeModifierSpace
         self.showInputPath = showInputPath
         self.activeModifiers = activeModifiers
         self.yabaiQualifier = yabaiQualifier
@@ -195,17 +191,6 @@ struct KeyboardView: View {
                 Divider()
                     .overlay(Color(hex: "#45475a"))
                 LayerFooterView(footer: footer, availableWidth: contentWidth)
-            }
-
-            if presentation.name == "apps", let registry {
-                Divider()
-                    .overlay(Color(hex: "#45475a"))
-                ModifierSpaceLegend(
-                    slots: registry.views.modifierSpace.slots,
-                    registry: registry,
-                    showFree: showFreeModifierSpace,
-                    availableWidth: contentWidth
-                )
             }
         }
         .padding(32)

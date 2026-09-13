@@ -211,7 +211,8 @@ struct ModifierSpaceSlot: Codable, Hashable, Identifiable {
     let state: String
     let bindingIds: [String]
 
-    var isFree: Bool { state == "free" }
+    // Older registries called uncatalogued combinations "free".
+    var isUnrecorded: Bool { state == "unrecorded" || state == "free" }
 }
 
 
