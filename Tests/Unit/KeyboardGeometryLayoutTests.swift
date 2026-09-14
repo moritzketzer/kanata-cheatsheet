@@ -6,7 +6,7 @@ import Testing
 
 @Suite("Keyboard Geometry Layout")
 struct KeyboardGeometryLayoutTests {
-    @Test("Source renders the projected Base action color", arguments: [
+    @Test("Source uses the same purple regardless of the Base action color", arguments: [
         ("Paste", "#89b4fa"), ("Copy / Yabai", "#cba6f7"), ("Action", "#f38ba8"),
     ])
     @MainActor
@@ -17,11 +17,13 @@ struct KeyboardGeometryLayoutTests {
             holdModifier: nil, explanation: label
         )
         let slot = inputPathSlot(key: key)
-        try expectMineColors(slot, present: label.contains(" / ")
-            ? [colorHex, "#cdd6f4", "#a6adc8"] : [colorHex])
+        try expectMineColors(slot, present: ["#cba6f7"])
+        let plain = KeyboardInputPathCell(slot: slot, width: 80, height: 80)
+        #expect(plain.fillColor == Color(hex: "#cba6f7").opacity(0.12))
+        #expect(plain.strokeColor == Color(hex: "#cba6f7").opacity(0.24))
     }
 
-    @Test("Source modifier holds retain Base's neutral badge color")
+    @Test("Source omits modifier holds from Mine")
     @MainActor
     func sourceModifierColor() throws {
         let slot = inputPathSlot(key: KeyboardPresentedKey(
@@ -29,10 +31,11 @@ struct KeyboardGeometryLayoutTests {
             freeLabel: nil, colorHex: "#89b4fa", primary: nil,
             holdModifier: "control", explanation: nil
         ))
-        try expectMineColors(slot, present: ["#89b4fa", "#cdd6f4", "#a6adc8"])
+        #expect(KeyboardInputPathLabels.resolve(slot).mine == "C")
+        try expectMineColors(slot, present: ["#cba6f7"], absent: ["#89b4fa", "#cdd6f4", "#a6adc8"])
     }
 
-    @Test("Source disabled and device-local outputs carry no action accent")
+    @Test("Source disabled and device-local keys retain the same purple")
     @MainActor
     func sourceInactiveColors() throws {
         var disabled = inputPathSlot(key: KeyboardPresentedKey(
@@ -46,15 +49,22 @@ struct KeyboardGeometryLayoutTests {
             mineHoldModifier: nil, key: nil
         )
         for slot in [disabled, deviceLocal] {
-            try expectMineColors(slot, present: ["#a6adc8"], absent: ["#f38ba8"])
+            #expect(KeyboardInputPathLabels.resolve(slot).mine == nil)
+            let cell = KeyboardInputPathCell(slot: slot, width: 80, height: 80)
+            #expect(cell.fillColor == Color(hex: "#cba6f7").opacity(0.12))
+            #expect(cell.strokeColor == Color(hex: "#cba6f7").opacity(0.24))
         }
     }
 
-    @Test("Source retains tap letters beside layer holds")
+    @Test("Source keeps only the tap when a key also holds a layer")
     func sourceTapAndHold() {
         var slot = inputPathSlot(key: presentedKey(badge: "U", explanation: "Nav"))
         slot.mineKey = "U"
-        #expect(KeyboardInputPathLabels.resolve(slot).mine == "U / Nav")
+        #expect(KeyboardInputPathLabels.resolve(slot).mine == "U")
+        let thumb = inputPathSlot(key: presentedKey(explanation: "Copy / Yabai"))
+        #expect(KeyboardInputPathLabels.resolve(thumb).mine == "Copy")
+        let mouse = inputPathSlot(key: presentedKey(explanation: "Mouse"))
+        #expect(KeyboardInputPathLabels.resolve(mouse).mine == nil)
     }
 
     @Test("Source only marks explicitly disabled inputs")
@@ -62,7 +72,7 @@ struct KeyboardGeometryLayoutTests {
         var slot = inputPathSlot(key: presentedKey(badge: "F13"))
         #expect(KeyboardInputPathLabels.resolve(slot).mine == "F13")
         slot.mineDisabled = true
-        #expect(KeyboardInputPathLabels.resolve(slot).mine == "Disabled")
+        #expect(KeyboardInputPathLabels.resolve(slot).mine == nil)
     }
 
     @Test("MacBook arrows embed a half-height vertical pair")
@@ -182,25 +192,29 @@ struct KeyboardGeometryLayoutTests {
         ))
         let action = inputPathSlot(key: presentedKey(actionLabel: "Action"))
         let badge = inputPathSlot(key: presentedKey(badge: "C"))
+        let source = inputPathSlot(key: presentedKey(
+            badge: "Source", explanation: "Firmware / Source / Mine"
+        ))
 
         #expect(KeyboardInputPathLabels.resolve(explanation).mine == "Explanation")
         #expect(KeyboardInputPathLabels.resolve(visual).mine == "Visual")
         #expect(KeyboardInputPathLabels.resolve(keyLabel).mine == "Key")
         #expect(KeyboardInputPathLabels.resolve(action).mine == "Action")
         #expect(KeyboardInputPathLabels.resolve(badge).mine == "C")
+        #expect(KeyboardInputPathLabels.resolve(source).mine == "Source")
     }
 
     @Test(
-        "input path labels append all Mine Home Row Mod hold glyphs",
+        "input path labels omit all Mine Home Row Mod hold glyphs",
         arguments: [
-            ("C", "control", "C / ⌃"),
-            ("R", "option", "R / ⌥"),
-            ("I", "shift", "I / ⇧"),
-            ("E", "command", "E / ⌘"),
-            ("N", "command", "N / ⌘"),
-            ("T", "shift", "T / ⇧"),
-            ("S", "option", "S / ⌥"),
-            ("H", "control", "H / ⌃"),
+            ("C", "control", "C"),
+            ("R", "option", "R"),
+            ("I", "shift", "I"),
+            ("E", "command", "E"),
+            ("N", "command", "N"),
+            ("T", "shift", "T"),
+            ("S", "option", "S"),
+            ("H", "control", "H"),
         ]
     )
     func inputPathHomeRowMods(
@@ -248,7 +262,7 @@ struct KeyboardGeometryLayoutTests {
     func inputPathCaption() {
         #expect(
             KeyboardInputPathLabels.caption
-                == "FIRMWARE -> KANATA SOURCE -> MINE (TAP / HOLD)"
+                == "FIRMWARE -> KANATA SOURCE -> MINE"
         )
     }
 

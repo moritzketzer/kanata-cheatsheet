@@ -166,12 +166,6 @@ struct KeyboardView: View {
 
             geometryContent
 
-            if showInputPath {
-                Text("Pro Taste von oben nach unten lesen.  – = keine Weitergabe an Kanata")
-                    .font(.system(size: keySize * 0.12))
-                    .foregroundStyle(Color(hex: "#9696aa"))
-            }
-
             if presentation.name == "yabai" && !showInputPath {
                 YabaiModifierLegend(activeModifiers: activeModifiers)
             } else if presentation.hasHoldModifiers && !showInputPath {

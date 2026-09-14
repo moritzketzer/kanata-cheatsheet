@@ -40,7 +40,7 @@ enum DefySlotRenderKind: Equatable {
 
 
 struct KeyboardInputPathLabels: Equatable {
-    static let caption = "FIRMWARE -> KANATA SOURCE -> MINE (TAP / HOLD)"
+    static let caption = "FIRMWARE -> KANATA SOURCE -> MINE"
 
     let firmware: String
     let source: String?
@@ -59,28 +59,22 @@ struct KeyboardInputPathLabels: Equatable {
             )
         }
 
-        var tap = key.explanation
+        let presentationLabel = key.explanation
             ?? key.primary?.token
             ?? key.keyLabel
             ?? key.actionLabel
             ?? key.badge
-        if let mineKey = slot.mineKey, let explanation = key.explanation,
-           !explanation.contains(" / "), explanation != mineKey {
-            tap = "\(mineKey) / \(explanation)"
-        } else if let explanation = key.explanation, explanation.count > 20,
-                  let badge = key.badge {
-            tap = badge
+        let tap = slot.mineKey ?? presentationLabel.flatMap { label -> String? in
+            // Dedicated Mouse keys only select a layer while held; they have no tap.
+            if label == "Mouse" { return nil }
+            if label.count > 20, let badge = key.badge { return badge }
+            return label.components(separatedBy: " / ")[0]
         }
-        let hold = (key.holdModifier ?? slot.mineHoldModifier).flatMap(
-            KeyboardVisualSemantics.modifierGlyph
-        )
-        let mineParts = [tap, hold].compactMap { $0 }
 
         return KeyboardInputPathLabels(
             firmware: slot.firmwareKey,
             source: slot.sourceKey,
-            mine: slot.mineDisabled ? "Disabled"
-                : mineParts.isEmpty ? nil : mineParts.joined(separator: " / "),
+            mine: slot.mineDisabled ? nil : tap,
             isDeviceLocal: false
         )
     }
@@ -258,7 +252,6 @@ struct DefyGeometryView: View {
                     Text("Kanata Source").foregroundStyle(Color(hex: "#cdd6f4"))
                     Text("→").foregroundStyle(Color(hex: "#9696aa"))
                     Text("Mine").foregroundStyle(Color(hex: "#cdd6f4"))
-                    Text("(Tap / Hold: Base-Farben)").foregroundStyle(Color(hex: "#9696aa"))
                 }
                 .font(.system(size: metrics.keySize * 0.16, weight: .semibold))
                 .padding(.bottom, metrics.keySize * 0.12)
@@ -506,45 +499,13 @@ struct KeyboardInputPathCell: View {
         .joined(separator: ", ")
     }
 
-    private var mappedCell: KeyCell? {
-        slot.key.map { KeyCell(key: $0, source: .registry, width: width, height: height) }
-    }
-
-    private var quietShell: QuietKeyShell {
-        QuietKeyShell(label: slot.firmwareKey, width: width, height: height)
-    }
-
-    var fillColor: Color { mappedCell?.fillColor ?? quietShell.fillColor }
-    var strokeColor: Color { mappedCell?.strokeColor ?? quietShell.strokeColor }
+    var fillColor: Color { Color(hex: "#cba6f7").opacity(0.12) }
+    var strokeColor: Color { Color(hex: "#cba6f7").opacity(0.24) }
 
     var body: some View {
         content
             .background(RoundedRectangle(cornerRadius: 6).fill(fillColor))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(strokeColor, lineWidth: 1))
-    }
-
-    private var mineText: AttributedString {
-        let value = labels.mine ?? "-"
-        let neutral = Color(hex: "#cdd6f4")
-        let muted = Color(hex: "#a6adc8")
-        let action = slot.key?.colorHex.map(Color.init(hex:)) ?? neutral
-        var text = AttributedString(value)
-        text.foregroundColor = slot.mineDisabled || labels.mine == nil ? muted : action
-        guard !slot.mineDisabled, let separator = value.range(of: " / ") else {
-            return text
-        }
-
-        // Layer holds carry the action color; ordinary taps stay neutral.
-        // Modifier holds follow Base's neutral modifier badge instead.
-        let modifierHold = (slot.key?.holdModifier ?? slot.mineHoldModifier)
-            .flatMap(KeyboardVisualSemantics.modifierGlyph) != nil
-        var tap = AttributedString(String(value[..<separator.lowerBound]))
-        tap.foregroundColor = modifierHold ? action : neutral
-        var divider = AttributedString(value.count > (isThumb ? 10 : 11) ? "\n/ " : " / ")
-        divider.foregroundColor = muted
-        var hold = AttributedString(String(value[separator.upperBound...]))
-        hold.foregroundColor = modifierHold ? neutral : action
-        return tap + divider + hold
     }
 
     var content: some View {
@@ -553,14 +514,9 @@ struct KeyboardInputPathCell: View {
                 .foregroundStyle(Color(hex: "#a6adc8"))
             Text(labels.source ?? "-")
                 .foregroundStyle(Color(hex: labels.source == nil ? "#a6adc8" : "#cdd6f4"))
-            Text(mineText)
+            Text(labels.mine ?? "-")
+                .foregroundStyle(Color(hex: "#cba6f7"))
                 .fontWeight(.semibold)
-            if isThumb, let physicalId = slot.physicalId {
-                Text(physicalId)
-                    .font(.system(size: (referenceKeySize ?? height) * 0.10))
-                    .foregroundStyle(Color(hex: "#9696aa"))
-                    .padding(.top, primaryFontSize * 0.12)
-            }
         }
         .font(.system(size: primaryFontSize))
         .multilineTextAlignment(.center)
