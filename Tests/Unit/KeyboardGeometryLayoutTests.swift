@@ -17,26 +17,37 @@ struct KeyboardGeometryLayoutTests {
             holdModifier: nil, explanation: label
         )
         let slot = inputPathSlot(key: key)
-        let host = NSHostingView(rootView: KeyboardInputPathCell(
-            slot: slot, width: 200, height: 200
-        ).background(Color(hex: "#1e1e2e")))
-        host.frame = NSRect(x: 0, y: 0, width: 200, height: 200)
-        host.layoutSubtreeIfNeeded()
-        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-        host.cacheDisplay(in: host.bounds, to: bitmap)
-        let expected = try #require(NSColor(Color(hex: colorHex)).usingColorSpace(.deviceRGB))
-        var matchingPixels = 0
-        for y in 0..<bitmap.pixelsHigh {
-            for x in 0..<bitmap.pixelsWide {
-                guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
-                if abs(pixel.redComponent - expected.redComponent) < 0.04,
-                   abs(pixel.greenComponent - expected.greenComponent) < 0.04,
-                   abs(pixel.blueComponent - expected.blueComponent) < 0.04 {
-                    matchingPixels += 1
-                }
-            }
+        try expectMineColors(slot, present: label.contains(" / ")
+            ? [colorHex, "#cdd6f4", "#a6adc8"] : [colorHex])
+    }
+
+    @Test("Source modifier holds retain Base's neutral badge color")
+    @MainActor
+    func sourceModifierColor() throws {
+        let slot = inputPathSlot(key: KeyboardPresentedKey(
+            id: "KeyA", width: 1, badge: "C", actionLabel: nil,
+            freeLabel: nil, colorHex: "#89b4fa", primary: nil,
+            holdModifier: "control", explanation: nil
+        ))
+        try expectMineColors(slot, present: ["#89b4fa", "#cdd6f4", "#a6adc8"])
+    }
+
+    @Test("Source disabled and device-local outputs carry no action accent")
+    @MainActor
+    func sourceInactiveColors() throws {
+        var disabled = inputPathSlot(key: KeyboardPresentedKey(
+            id: "F13", width: 1, badge: "F13", actionLabel: nil,
+            freeLabel: nil, colorHex: "#f38ba8", primary: nil,
+            holdModifier: nil, explanation: nil
+        ))
+        disabled.mineDisabled = true
+        let deviceLocal = KeyboardPresentedDefySlot(
+            firmwareKey: "Battery Status", sourceKey: nil,
+            mineHoldModifier: nil, key: nil
+        )
+        for slot in [disabled, deviceLocal] {
+            try expectMineColors(slot, present: ["#a6adc8"], absent: ["#f38ba8"])
         }
-        #expect(matchingPixels > 20, "Mine must retain the Base color \(colorHex)")
     }
 
     @Test("Source retains tap letters beside layer holds")
@@ -512,6 +523,46 @@ struct KeyboardGeometryLayoutTests {
         let y = thumb.pixelsHigh * 3 / 4
         #expect(try #require(ordinary.colorAt(x: x, y: y)).alphaComponent > 0)
         #expect(try #require(thumb.colorAt(x: x, y: y)).alphaComponent == 0)
+    }
+
+    @MainActor
+    private func expectMineColors(
+        _ slot: KeyboardPresentedDefySlot,
+        present: [String],
+        absent: [String] = []
+    ) throws {
+        // Blank upstream stages so their neutral text cannot satisfy Mine checks.
+        let isolated = KeyboardPresentedDefySlot(
+            firmwareKey: "", sourceKey: slot.sourceKey == nil ? nil : "",
+            mineHoldModifier: slot.mineHoldModifier, key: slot.key,
+            mineKey: slot.mineKey, mineDisabled: slot.mineDisabled
+        )
+        let host = NSHostingView(rootView: KeyboardInputPathCell(
+            slot: isolated, width: 200, height: 200
+        ).background(Color(hex: "#1e1e2e")))
+        host.frame = NSRect(x: 0, y: 0, width: 200, height: 200)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        for colorHex in present + absent {
+            let expected = try #require(NSColor(Color(hex: colorHex)).usingColorSpace(.deviceRGB))
+            var matchingPixels = 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                    if abs(pixel.redComponent - expected.redComponent) < 0.04,
+                       abs(pixel.greenComponent - expected.greenComponent) < 0.04,
+                       abs(pixel.blueComponent - expected.blueComponent) < 0.04 {
+                        matchingPixels += 1
+                    }
+                }
+            }
+            if present.contains(colorHex) {
+                #expect(matchingPixels > 20, "Mine must render \(colorHex)")
+            } else {
+                #expect(matchingPixels == 0, "Mine must omit \(colorHex)")
+            }
+        }
     }
 
     private func inputPathSlot(
