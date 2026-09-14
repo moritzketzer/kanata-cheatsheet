@@ -506,8 +506,16 @@ struct KeyboardInputPathCell: View {
         .joined(separator: ", ")
     }
 
-    var fillColor: Color { Color(hex: "#313244").opacity(0.34) }
-    var strokeColor: Color { Color(hex: "#484858") }
+    private var mappedCell: KeyCell? {
+        slot.key.map { KeyCell(key: $0, source: .registry, width: width, height: height) }
+    }
+
+    private var quietShell: QuietKeyShell {
+        QuietKeyShell(label: slot.firmwareKey, width: width, height: height)
+    }
+
+    var fillColor: Color { mappedCell?.fillColor ?? quietShell.fillColor }
+    var strokeColor: Color { mappedCell?.strokeColor ?? quietShell.strokeColor }
 
     var body: some View {
         content
