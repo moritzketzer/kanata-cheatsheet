@@ -6,6 +6,21 @@ import Testing
 
 @Suite("Keyboard Geometry Layout")
 struct KeyboardGeometryLayoutTests {
+    @Test("Source retains tap letters beside layer holds")
+    func sourceTapAndHold() {
+        var slot = inputPathSlot(key: presentedKey(badge: "U", explanation: "Nav"))
+        slot.mineKey = "U"
+        #expect(KeyboardInputPathLabels.resolve(slot).mine == "U / Nav")
+    }
+
+    @Test("Source only marks explicitly disabled inputs")
+    func sourceDisabled() {
+        var slot = inputPathSlot(key: presentedKey(badge: "F13"))
+        #expect(KeyboardInputPathLabels.resolve(slot).mine == "F13")
+        slot.mineDisabled = true
+        #expect(KeyboardInputPathLabels.resolve(slot).mine == "Disabled")
+    }
+
     @Test("MacBook arrows embed a half-height vertical pair")
     func macBookArrowMetrics() {
         let metrics = KeyboardGeometryMetrics(keySize: 48, spacing: 4)
@@ -382,28 +397,22 @@ struct KeyboardGeometryLayoutTests {
     @MainActor
     func smallThumbInputPath(_ side: KeyboardHalfSide) {
         let keySize = KeyboardGeometryMetrics.defyInputPathMinimumKeySize
-        let rect = DefyThumbGeometry(side: side, keySize: keySize).keys[3].content
-        let labelHeight = max(6, keySize * 0.13)
-        #expect(rect.height - labelHeight >= 20)
         let slot = KeyboardPresentedDefySlot(
-            firmwareKey: "Numpad2", sourceKey: "kp2", mineHoldModifier: nil,
-            key: presentedKey(actionLabel: "Cut")
+            firmwareKey: side == .left ? "F16" : "F19",
+            sourceKey: side == .left ? "f16" : "f19", mineHoldModifier: nil,
+            key: presentedKey(actionLabel: side == .left ? "Copy / Yabai" : "Paste / Yabai"),
+            physicalId: side == .left ? "LT4" : "RT4"
         )
-        let labels = KeyboardInputPathLabels.resolve(slot)
-        #expect(labels.firmware == "Numpad2")
-        #expect(labels.source == "kp2")
-        #expect(labels.mine == "Cut")
         let cell = KeyboardInputPathCell(
-            slot: slot, width: rect.width, height: rect.height - labelHeight,
-            isThumb: true
+            slot: slot, width: keySize * 0.94, height: keySize * 0.94,
+            isThumb: true, referenceKeySize: keySize
         )
-        #expect(cell.primaryFontSize >= 4)
-        #expect(cell.sourceFontSize >= 3.5)
-        #expect(cell.minimumScaleFactor >= 0.85)
+        let mainCell = KeyboardInputPathCell(slot: slot, width: keySize, height: keySize)
+        #expect(cell.primaryFontSize == mainCell.primaryFontSize)
+        #expect(cell.primaryFontSize >= 10)
         let host = NSHostingView(rootView: cell.content)
         host.layoutSubtreeIfNeeded()
-        // AppKit rounds the SwiftUI frame outward to whole points.
-        #expect(host.fittingSize.height <= ceil(rect.height - labelHeight))
+        #expect(host.fittingSize.height <= ceil(keySize * 0.94))
     }
 
     @Test("identified Defy views reserve the full fan and fall back as a pair", arguments: [CGFloat(28), CGFloat(64)])

@@ -330,6 +330,7 @@ struct RegistryKeyboardPosition: Codable, Hashable, Identifiable {
     let sourceKey: String
     let mineKey: String?
     var mineHoldModifier: String? = nil
+    var mineDisabled: Bool? = nil
     let namedKey: String?
     var badge: String? = nil
     let width: Double

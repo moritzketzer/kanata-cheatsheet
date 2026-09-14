@@ -131,7 +131,11 @@ struct KeyboardView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            if presentation.name == "yabai" {
+            if showInputPath {
+                Text("Source")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#e4e4ed"))
+            } else if presentation.name == "yabai" {
                 VStack(spacing: 3) {
                     Text(presentation.label)
                         .font(.system(size: 16, weight: .bold, design: .monospaced))
@@ -162,6 +166,12 @@ struct KeyboardView: View {
 
             geometryContent
 
+            if showInputPath {
+                Text("Pro Taste von oben nach unten lesen.  – = keine Weitergabe an Kanata")
+                    .font(.system(size: keySize * 0.12))
+                    .foregroundStyle(Color(hex: "#9696aa"))
+            }
+
             if presentation.name == "yabai" && !showInputPath {
                 YabaiModifierLegend(activeModifiers: activeModifiers)
             } else if presentation.hasHoldModifiers && !showInputPath {
@@ -171,7 +181,7 @@ struct KeyboardView: View {
                     .tracking(1.2)
             }
 
-            if !presentation.groups.isEmpty {
+            if !showInputPath && !presentation.groups.isEmpty {
                 HStack(spacing: 24) {
                     ForEach(presentation.groups) { group in
                         HStack(spacing: 6) {
@@ -187,7 +197,7 @@ struct KeyboardView: View {
                 .padding(.top, 4)
             }
 
-            if let footer = presentation.footer {
+            if !showInputPath, let footer = presentation.footer {
                 Divider()
                     .overlay(Color(hex: "#45475a"))
                 LayerFooterView(footer: footer, availableWidth: contentWidth)

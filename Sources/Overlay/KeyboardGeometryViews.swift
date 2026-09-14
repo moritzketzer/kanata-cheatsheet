@@ -59,11 +59,18 @@ struct KeyboardInputPathLabels: Equatable {
             )
         }
 
-        let tap = key.explanation
+        var tap = key.explanation
             ?? key.primary?.token
             ?? key.keyLabel
             ?? key.actionLabel
             ?? key.badge
+        if let mineKey = slot.mineKey, let explanation = key.explanation,
+           !explanation.contains(" / "), explanation != mineKey {
+            tap = "\(mineKey) / \(explanation)"
+        } else if let explanation = key.explanation, explanation.count > 20,
+                  let badge = key.badge {
+            tap = badge
+        }
         let hold = (key.holdModifier ?? slot.mineHoldModifier).flatMap(
             KeyboardVisualSemantics.modifierGlyph
         )
@@ -72,7 +79,8 @@ struct KeyboardInputPathLabels: Equatable {
         return KeyboardInputPathLabels(
             firmware: slot.firmwareKey,
             source: slot.sourceKey,
-            mine: mineParts.isEmpty ? nil : mineParts.joined(separator: " / "),
+            mine: slot.mineDisabled ? "Disabled"
+                : mineParts.isEmpty ? nil : mineParts.joined(separator: " / "),
             isDeviceLocal: false
         )
     }
@@ -244,14 +252,18 @@ struct DefyGeometryView: View {
     var body: some View {
         VStack(spacing: metrics.keySize * 0.16) {
             if showInputPath {
-                Text(KeyboardInputPathLabels.caption)
-                    .font(.system(
-                        size: metrics.keySize * 0.13,
-                        weight: .semibold,
-                        design: .monospaced
-                    ))
-                    .foregroundStyle(Color(hex: "#6c7086"))
-                    .tracking(1)
+                HStack(spacing: metrics.keySize * 0.12) {
+                    Text("Firmware").foregroundStyle(Color(hex: "#e7b777"))
+                    Text("→").foregroundStyle(Color(hex: "#9696aa"))
+                    Text("Kanata Source").foregroundStyle(Color(hex: "#8fc9ed"))
+                    Text("→").foregroundStyle(Color(hex: "#9696aa"))
+                    Text("Mine").foregroundStyle(Color(hex: "#a6dfc4"))
+                    Text("(Tap / Hold)").foregroundStyle(Color(hex: "#9696aa"))
+                }
+                .font(.system(size: metrics.keySize * 0.16, weight: .semibold))
+                .padding(.bottom, metrics.keySize * 0.12)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(KeyboardInputPathLabels.caption)
             }
 
             HStack(alignment: .top, spacing: metrics.defyCenterGap) {
@@ -431,19 +443,14 @@ private struct DefyThumbFan: View {
             cell.position(x: geometry.areaCenter.x, y: geometry.areaCenter.y)
                 .accessibilityElement(children: .combine)
         case .inputPath(let slot):
-            let labelHeight = max(6, keySize * 0.13)
             let cell = KeyboardInputPathCell(
-                slot: slot, width: rect.width, height: rect.height - labelHeight,
-                isThumb: true
+                slot: slot, width: keySize * 0.94, height: keySize * 0.94,
+                isThumb: true, referenceKeySize: keySize
             )
             geometry.path.fill(cell.fillColor)
             geometry.path.stroke(cell.strokeColor, lineWidth: 1)
-            VStack(spacing: 0) {
-                physicalLabel(geometry.id, height: labelHeight)
-                cell.content
-            }
-            .frame(width: rect.width, height: rect.height)
-            .position(x: rect.midX, y: rect.midY)
+            cell.content
+                .position(x: geometry.areaCenter.x, y: geometry.areaCenter.y)
         case .quiet(let label):
             let labelHeight = max(8, keySize * 0.13)
             let cell = QuietKeyShell(label: label, width: rect.width, height: rect.height - labelHeight)
@@ -478,9 +485,9 @@ struct KeyboardInputPathCell: View {
     let height: CGFloat
     var isThumb: Bool = false
 
-    var primaryFontSize: CGFloat { isThumb ? max(4, height * 0.14) : height * 0.14 }
-    var sourceFontSize: CGFloat { isThumb ? max(3.5, height * 0.12) : height * 0.12 }
-    var minimumScaleFactor: CGFloat { isThumb ? 0.85 : 0.42 }
+    var referenceKeySize: CGFloat? = nil
+
+    var primaryFontSize: CGFloat { (referenceKeySize ?? height) * 0.16 }
 
     private var labels: KeyboardInputPathLabels {
         KeyboardInputPathLabels.resolve(slot)
@@ -500,7 +507,7 @@ struct KeyboardInputPathCell: View {
     }
 
     var fillColor: Color { Color(hex: "#313244").opacity(0.34) }
-    var strokeColor: Color { Color(hex: "#cba6f7").opacity(0.16) }
+    var strokeColor: Color { Color(hex: "#484858") }
 
     var body: some View {
         content
@@ -508,57 +515,34 @@ struct KeyboardInputPathCell: View {
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(strokeColor, lineWidth: 1))
     }
 
+    private var mineText: String {
+        let value = labels.mine ?? "-"
+        guard value.count > (isThumb ? 10 : 11),
+              let separator = value.range(of: " / ") else { return value }
+        return String(value[..<separator.lowerBound]) + "\n/ "
+            + String(value[separator.upperBound...])
+    }
+
     var content: some View {
-        VStack(spacing: isThumb ? 0.5 : 1) {
+        VStack(spacing: isThumb ? 0 : primaryFontSize * 0.30) {
             Text(labels.firmware)
-                .font(.system(
-                    size: primaryFontSize,
-                    weight: .semibold,
-                    design: .monospaced
-                ))
-                .foregroundStyle(Color(hex: "#cba6f7"))
-                .lineLimit(2)
-                .minimumScaleFactor(minimumScaleFactor)
-                .multilineTextAlignment(.center)
-
-            if labels.isDeviceLocal {
-                Text("DEVICE-LOCAL")
-                    .font(.system(
-                        size: isThumb ? max(3.5, height * 0.115) : height * 0.115,
-                        weight: .medium,
-                        design: .monospaced
-                    ))
-                    .foregroundStyle(Color(hex: "#6c7086"))
-                    .lineLimit(1)
-                    .minimumScaleFactor(minimumScaleFactor)
-            } else {
-                if let source = labels.source {
-                    Text(source)
-                        .font(.system(
-                            size: sourceFontSize,
-                            design: .monospaced
-                        ))
-                        .foregroundStyle(Color(hex: "#6c7086"))
-                        .lineLimit(1)
-                        .minimumScaleFactor(minimumScaleFactor)
-                }
-
-                if let mine = labels.mine {
-                    Text(mine)
-                        .font(.system(
-                            size: primaryFontSize,
-                            weight: .semibold,
-                            design: .monospaced
-                        ))
-                        .foregroundStyle(Color(hex: "#cdd6f4"))
-                        .lineLimit(2)
-                        .minimumScaleFactor(minimumScaleFactor)
-                        .multilineTextAlignment(.center)
-                }
+                .foregroundStyle(Color(hex: "#e7b777"))
+            Text(labels.source ?? "-")
+                .foregroundStyle(Color(hex: "#8fc9ed"))
+            Text(mineText)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color(hex: "#a6dfc4"))
+            if isThumb, let physicalId = slot.physicalId {
+                Text(physicalId)
+                    .font(.system(size: (referenceKeySize ?? height) * 0.10))
+                    .foregroundStyle(Color(hex: "#9696aa"))
+                    .padding(.top, primaryFontSize * 0.12)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(isThumb ? 0.25 : 3)
+        .font(.system(size: primaryFontSize))
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: width - (isThumb ? 0 : 6), height: height)
         .frame(width: width, height: height)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)

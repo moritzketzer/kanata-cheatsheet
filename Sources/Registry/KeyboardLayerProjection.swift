@@ -86,6 +86,8 @@ struct KeyboardPresentedDefySlot: Equatable {
     let mineHoldModifier: String?
     let key: KeyboardPresentedKey?
     var physicalId: String? = nil
+    var mineKey: String? = nil
+    var mineDisabled: Bool = false
 }
 
 
@@ -446,7 +448,9 @@ enum KeyboardLayerProjector {
                         sourceKey: slot.position?.sourceKey,
                         mineHoldModifier: slot.position?.mineHoldModifier,
                         key: key,
-                        physicalId: slot.physicalId
+                        physicalId: slot.physicalId,
+                        mineKey: slot.position?.mineKey,
+                        mineDisabled: slot.position?.mineDisabled ?? false
                     )
                 }
             }
