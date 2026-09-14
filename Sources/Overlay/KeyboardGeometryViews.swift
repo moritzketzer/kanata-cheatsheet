@@ -253,12 +253,12 @@ struct DefyGeometryView: View {
         VStack(spacing: metrics.keySize * 0.16) {
             if showInputPath {
                 HStack(spacing: metrics.keySize * 0.12) {
-                    Text("Firmware").foregroundStyle(Color(hex: "#e7b777"))
+                    Text("Firmware").foregroundStyle(Color(hex: "#a6adc8"))
                     Text("→").foregroundStyle(Color(hex: "#9696aa"))
-                    Text("Kanata Source").foregroundStyle(Color(hex: "#8fc9ed"))
+                    Text("Kanata Source").foregroundStyle(Color(hex: "#cdd6f4"))
                     Text("→").foregroundStyle(Color(hex: "#9696aa"))
-                    Text("Mine").foregroundStyle(Color(hex: "#a6dfc4"))
-                    Text("(Tap / Hold)").foregroundStyle(Color(hex: "#9696aa"))
+                    Text("Mine").foregroundStyle(Color(hex: "#cdd6f4"))
+                    Text("(Tap / Hold: Base-Farben)").foregroundStyle(Color(hex: "#9696aa"))
                 }
                 .font(.system(size: metrics.keySize * 0.16, weight: .semibold))
                 .padding(.bottom, metrics.keySize * 0.12)
@@ -515,23 +515,38 @@ struct KeyboardInputPathCell: View {
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(strokeColor, lineWidth: 1))
     }
 
-    private var mineText: String {
+    private var mineText: AttributedString {
         let value = labels.mine ?? "-"
-        guard value.count > (isThumb ? 10 : 11),
-              let separator = value.range(of: " / ") else { return value }
-        return String(value[..<separator.lowerBound]) + "\n/ "
-            + String(value[separator.upperBound...])
+        let neutral = Color(hex: "#cdd6f4")
+        let muted = Color(hex: "#a6adc8")
+        let action = slot.key?.colorHex.map(Color.init(hex:)) ?? neutral
+        var text = AttributedString(value)
+        text.foregroundColor = slot.mineDisabled || labels.mine == nil ? muted : action
+        guard !slot.mineDisabled, let separator = value.range(of: " / ") else {
+            return text
+        }
+
+        // Layer holds carry the action color; ordinary taps stay neutral.
+        // Modifier holds follow Base's neutral modifier badge instead.
+        let modifierHold = (slot.key?.holdModifier ?? slot.mineHoldModifier)
+            .flatMap(KeyboardVisualSemantics.modifierGlyph) != nil
+        var tap = AttributedString(String(value[..<separator.lowerBound]))
+        tap.foregroundColor = modifierHold ? action : neutral
+        var divider = AttributedString(value.count > (isThumb ? 10 : 11) ? "\n/ " : " / ")
+        divider.foregroundColor = muted
+        var hold = AttributedString(String(value[separator.upperBound...]))
+        hold.foregroundColor = modifierHold ? neutral : action
+        return tap + divider + hold
     }
 
     var content: some View {
         VStack(spacing: isThumb ? 0 : primaryFontSize * 0.30) {
             Text(labels.firmware)
-                .foregroundStyle(Color(hex: "#e7b777"))
+                .foregroundStyle(Color(hex: "#a6adc8"))
             Text(labels.source ?? "-")
-                .foregroundStyle(Color(hex: "#8fc9ed"))
+                .foregroundStyle(Color(hex: labels.source == nil ? "#a6adc8" : "#cdd6f4"))
             Text(mineText)
                 .fontWeight(.semibold)
-                .foregroundStyle(Color(hex: "#a6dfc4"))
             if isThumb, let physicalId = slot.physicalId {
                 Text(physicalId)
                     .font(.system(size: (referenceKeySize ?? height) * 0.10))

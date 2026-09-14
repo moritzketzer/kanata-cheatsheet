@@ -6,6 +6,39 @@ import Testing
 
 @Suite("Keyboard Geometry Layout")
 struct KeyboardGeometryLayoutTests {
+    @Test("Source renders the projected Base action color", arguments: [
+        ("Paste", "#89b4fa"), ("Copy / Yabai", "#cba6f7"), ("Action", "#f38ba8"),
+    ])
+    @MainActor
+    func sourceActionColor(_ label: String, _ colorHex: String) throws {
+        let key = KeyboardPresentedKey(
+            id: "F16", width: 1, badge: nil, actionLabel: label,
+            freeLabel: nil, colorHex: colorHex, primary: nil,
+            holdModifier: nil, explanation: label
+        )
+        let slot = inputPathSlot(key: key)
+        let host = NSHostingView(rootView: KeyboardInputPathCell(
+            slot: slot, width: 200, height: 200
+        ).background(Color(hex: "#1e1e2e")))
+        host.frame = NSRect(x: 0, y: 0, width: 200, height: 200)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let expected = try #require(NSColor(Color(hex: colorHex)).usingColorSpace(.deviceRGB))
+        var matchingPixels = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                if abs(pixel.redComponent - expected.redComponent) < 0.04,
+                   abs(pixel.greenComponent - expected.greenComponent) < 0.04,
+                   abs(pixel.blueComponent - expected.blueComponent) < 0.04 {
+                    matchingPixels += 1
+                }
+            }
+        }
+        #expect(matchingPixels > 20, "Mine must retain the Base color \(colorHex)")
+    }
+
     @Test("Source retains tap letters beside layer holds")
     func sourceTapAndHold() {
         var slot = inputPathSlot(key: presentedKey(badge: "U", explanation: "Nav"))
