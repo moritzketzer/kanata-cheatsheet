@@ -15,7 +15,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: pomodoroConfig,
             registryResult: .failure(NSError(domain: "Test", code: 1)),
-            pomodoroStatusReader: { reads += 1; return status }
+            pomodoroStatusReader: { reads += 1; return status },
+            presentsPanels: false
         )
         #expect(reads == 0)
         controller.handleLayerChange("pomodoro")
@@ -61,7 +62,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: pomodoroConfig,
             registryResult: .failure(NSError(domain: "Test", code: 1)),
-            pomodoroStatusReader: { reads += 1; return status }
+            pomodoroStatusReader: { reads += 1; return status },
+            presentsPanels: false
         )
         controller.handleMessage("cheatsheet-pin-toggle:pomodoro")
         #expect(reads == 1)
@@ -91,7 +93,8 @@ struct OverlayControllerTests {
         var controller: OverlayController? = OverlayController(
             config: pomodoroConfig,
             registryResult: .failure(NSError(domain: "Test", code: 1)),
-            pomodoroStatusReader: { reads += 1; return nil }
+            pomodoroStatusReader: { reads += 1; return nil },
+            presentsPanels: false
         )
         weak let weakController = controller
         controller?.handleMessage("cheatsheet-show:pomodoro")
@@ -116,7 +119,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: pomodoroConfig,
             registryResult: .failure(NSError(domain: "Test", code: 1)),
-            pomodoroStatusReader: { status }
+            pomodoroStatusReader: { status },
+            presentsPanels: false
         )
         controller.handleMessage("cheatsheet-show:pomodoro")
         defer { controller.handleMessage("cheatsheet-hide") }
@@ -292,7 +296,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
             registryResult: .success(yabaiRegistry()),
-            modifierFlags: { 0x20 }
+            modifierFlags: { 0x20 },
+            presentsPanels: false
         )
 
         controller.handleConnectionChange(true)
@@ -322,7 +327,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
             registryResult: .success(yabaiRegistry()),
-            modifierFlags: { flags }
+            modifierFlags: { flags },
+            presentsPanels: false
         )
         controller.handleConnectionChange(true)
         controller.handleLayerChange("yabai")
@@ -360,7 +366,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
             registryResult: .success(yabaiRegistry()),
-            modifierFlags: { flags }
+            modifierFlags: { flags },
+            presentsPanels: false
         )
         controller.handleConnectionChange(true)
         controller.handleMessage("cheatsheet-show:yabai")
@@ -396,7 +403,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
             registryResult: .success(yabaiRegistry()),
-            modifierFlags: { flags }
+            modifierFlags: { flags },
+            presentsPanels: false
         )
         controller.handleConnectionChange(true)
         controller.handleLayerChange("yabai")
@@ -435,7 +443,8 @@ struct OverlayControllerTests {
                 trigger: "delay",
                 includeApps: true
             )),
-            modifierFlags: { 0x20 }
+            modifierFlags: { 0x20 },
+            presentsPanels: false
         )
         controller.handleConnectionChange(true)
         controller.handleLayerChange("yabai")
@@ -444,7 +453,7 @@ struct OverlayControllerTests {
         let panel = try #require(
             NSApplication.shared.windows
                 .compactMap { $0 as? OverlayPanel }
-                .last { $0.isVisible }
+                .last
         )
         let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
         let frame = panel.frame
@@ -464,7 +473,7 @@ struct OverlayControllerTests {
         let replacement = try #require(
             NSApplication.shared.windows
                 .compactMap { $0 as? OverlayPanel }
-                .last { $0.isVisible }
+                .last
         )
         let replacementHost = try #require(
             replacement.contentView as? NSHostingView<KeyboardView>
@@ -487,7 +496,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
             registryResult: .success(yabaiRegistry(trigger: "delay")),
-            modifierFlags: { flags }
+            modifierFlags: { flags },
+            presentsPanels: false
         )
         controller.handleConnectionChange(true)
         controller.handleLayerChange("yabai")
@@ -496,7 +506,7 @@ struct OverlayControllerTests {
         let panel = try #require(
             NSApplication.shared.windows
                 .compactMap { $0 as? OverlayPanel }
-                .last { $0.isVisible }
+                .last
         )
         let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
         let frame = panel.frame
@@ -516,7 +526,7 @@ struct OverlayControllerTests {
         let stillVisible = try #require(
             NSApplication.shared.windows
                 .compactMap { $0 as? OverlayPanel }
-                .last { $0.isVisible }
+                .last
         )
         #expect(stillVisible === panel)
         #expect(stillVisible.contentView === host)
@@ -1099,7 +1109,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(layers: [:]),
             registryResult: .success(geometryProfileRegistry()),
-            defaults: defaults
+            defaults: defaults,
+            presentsPanels: false
         )
 
         controller.handleMessage("cheatsheet-geometry-select:defy")
@@ -1114,9 +1125,7 @@ struct OverlayControllerTests {
     @MainActor
     func automaticSelectionPreservesDelayInEitherOrder() throws {
         for selectionFirst in [true, false] {
-            NSApplication.shared.windows
-                .compactMap { $0 as? OverlayPanel }
-                .forEach { $0.orderOut(nil) }
+            let earlierPanels = overlayPanels()
             let suite = "AutomaticGeometryDelayTests.\(UUID().uuidString)"
             let defaults = try #require(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }
@@ -1131,7 +1140,8 @@ struct OverlayControllerTests {
                     layers: [:]
                 ),
                 registryResult: .success(geometryProfileRegistry(trigger: "delay")),
-                defaults: defaults
+                defaults: defaults,
+                presentsPanels: false
             )
 
             if selectionFirst {
@@ -1143,10 +1153,7 @@ struct OverlayControllerTests {
             }
             RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
 
-            let visiblePanel = NSApplication.shared.windows
-                .compactMap { $0 as? OverlayPanel }
-                .last { $0.isVisible }
-            #expect(visiblePanel != nil)
+            #expect(overlayPanel(newerThan: earlierPanels) != nil)
             controller.handleMessage("cheatsheet-hide")
         }
     }
@@ -1165,7 +1172,8 @@ struct OverlayControllerTests {
         let first = OverlayController(
             config: Config(layers: [:]),
             registryResult: .success(geometryProfileRegistry()),
-            defaults: defaults
+            defaults: defaults,
+            presentsPanels: false
         )
         #expect(
             defaults.string(forKey: KeyboardGeometrySelection.defaultsKey)
@@ -1181,7 +1189,8 @@ struct OverlayControllerTests {
         let restored = OverlayController(
             config: Config(layers: [:]),
             registryResult: .success(geometryProfileRegistry()),
-            defaults: defaults
+            defaults: defaults,
+            presentsPanels: false
         )
         restored.handleMessage("cheatsheet-geometry-toggle")
         #expect(
@@ -1205,7 +1214,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
             registryResult: .success(geometryProfileRegistry()),
-            defaults: defaults
+            defaults: defaults,
+            presentsPanels: false
         )
 
         controller.handleMessage("cheatsheet-show:apps")
@@ -1242,7 +1252,8 @@ struct OverlayControllerTests {
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
             registryResult: .success(geometryProfileRegistry()),
-            defaults: defaults
+            defaults: defaults,
+            presentsPanels: false
         )
 
         controller.handleMessage("cheatsheet-geometry-select:defy")
@@ -1282,7 +1293,11 @@ struct OverlayControllerTests {
             layers: ["apps": Config.Layer(label: "APPS", groups: [:])]
         )
         let registry = modifierSpaceRegistry(occupiedCount: 6)
-        let controller = OverlayController(config: config, registryResult: .success(registry))
+        let controller = OverlayController(
+            config: config,
+            registryResult: .success(registry),
+            presentsPanels: false
+        )
 
         controller.handleMessage("cheatsheet-show:apps")
         let panel = try #require(NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
@@ -1321,7 +1336,8 @@ struct OverlayControllerTests {
         let registry = modifierSpaceRegistry(occupiedCount: 6)
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
-            registryResult: .success(registry)
+            registryResult: .success(registry),
+            presentsPanels: false
         )
 
         controller.handleMessage("cheatsheet-show:apps")
@@ -1336,7 +1352,6 @@ struct OverlayControllerTests {
         )
 
         #expect(switchedPanel === originalPanel)
-        #expect(switchedPanel.isVisible)
         #expect(switchedPanel.alphaValue == originalAlpha)
         let contentView = try #require(switchedPanel.contentView)
         #expect(contentView.fittingSize.height <= switchedPanel.frame.height)
@@ -1354,9 +1369,11 @@ struct OverlayControllerTests {
             width_percent: 75
         )
         let registry = modifierSpaceRegistry(occupiedCount: 6)
+        let earlierPanels = overlayPanels()
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
-            registryResult: .success(registry)
+            registryResult: .success(registry),
+            presentsPanels: false
         )
 
         controller.handleLayerChange("apps")
@@ -1364,10 +1381,7 @@ struct OverlayControllerTests {
         controller.handleLayerChange("apps-alt")
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.16))
 
-        let visiblePanel = NSApplication.shared.windows
-            .compactMap { $0 as? OverlayPanel }
-            .last { $0.isVisible }
-        #expect(visiblePanel != nil)
+        #expect(overlayPanel(newerThan: earlierPanels) != nil)
 
         controller.handleMessage("cheatsheet-hide")
     }
@@ -1397,7 +1411,8 @@ struct OverlayControllerTests {
 
         let controller = OverlayController(
             config: Config(display: display, layers: [:]),
-            registryResult: .success(pinnedLensRegistry())
+            registryResult: .success(pinnedLensRegistry()),
+            presentsPanels: false
         )
 
         controller.handleMessage("cheatsheet-pin-toggle:mine")
@@ -1419,6 +1434,52 @@ struct OverlayControllerTests {
         #expect(try #require(restoredPanel.contentView).fittingSize.height <= restoredPanel.frame.height)
 
         controller.handleMessage("cheatsheet-hide")
+    }
+
+    @Test("headless controller never puts a panel on screen")
+    @MainActor
+    func headlessControllerKeepsPanelsOffScreen() throws {
+        let display = Config.Display(
+            delay_ms: 0,
+            fade_in_ms: 150,
+            fade_out_ms: 100,
+            width_percent: 75
+        )
+        let earlierPanels = overlayPanels()
+        let controller = OverlayController(
+            config: Config(display: display, layers: [:]),
+            registryResult: .success(modifierSpaceRegistry(occupiedCount: 6)),
+            presentsPanels: false
+        )
+
+        controller.handleMessage("cheatsheet-show:apps")
+
+        let panel = try #require(overlayPanel(newerThan: earlierPanels))
+        #expect(panel.contentView is NSHostingView<KeyboardView>)
+        #expect(!panel.isVisible)
+        // The configured fades are skipped, not deferred: the opacity the
+        // animation would have reached is already applied.
+        #expect(panel.alphaValue == CGFloat(display.opacity))
+
+        controller.handleMessage("cheatsheet-hide")
+
+        #expect(!panel.isVisible)
+        #expect(panel.alphaValue == 0)
+    }
+
+    /// Every overlay panel this process has built, oldest first. Retired
+    /// panels stay in the window list, and headless controllers never order a
+    /// panel front, so identity rather than `isVisible` tells a fresh overlay
+    /// from an earlier one.
+    @MainActor
+    private func overlayPanels() -> [OverlayPanel] {
+        NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }
+    }
+
+    @MainActor
+    private func overlayPanel(newerThan earlier: [OverlayPanel]) -> OverlayPanel? {
+        let known = Set(earlier.map(ObjectIdentifier.init))
+        return overlayPanels().last { !known.contains(ObjectIdentifier($0)) }
     }
 
     private func modifierSpaceRegistry(occupiedCount: Int) -> KeybindingRegistry {

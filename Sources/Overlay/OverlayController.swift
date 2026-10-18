@@ -18,6 +18,37 @@ enum OverlayAction: Equatable {
     case none
 }
 
+/// Layer names the overlay special-cases. `KeyboardLayerPresentation` owns the
+/// registry-facing spelling of Yabai and Pomodoro; `apps` and `mine` are only
+/// meaningful to the behaviour in this file.
+private enum LayerName {
+    static let yabai = KeyboardLayerPresentation.yabaiLayerName
+    static let pomodoro = KeyboardLayerPresentation.pomodoroLayerName
+    static let apps = "apps"
+    static let mine = "mine"
+}
+
+/// Overlay control messages kanata pushes through `push-msg`. The three
+/// `…Prefix` names carry an argument; the rest are exact messages.
+private enum OverlayMessage {
+    static let geometrySelectPrefix = "cheatsheet-geometry-select:"
+    static let pinTogglePrefix = "cheatsheet-pin-toggle:"
+    static let showPrefix = "cheatsheet-show:"
+    static let geometryToggle = "cheatsheet-geometry-toggle"
+    static let spaceToggleFree = "cheatsheet-space-toggle-free"
+    static let inputPathToggle = "cheatsheet-input-path-toggle"
+    static let show = "cheatsheet-show"
+    static let hide = "cheatsheet-hide"
+    static let toggle = "cheatsheet-toggle"
+}
+
+/// The argument carried after `prefix`, or `nil` when `message` does not use
+/// that prefix.
+private func payload(of prefix: String, in message: String) -> Substring? {
+    guard message.hasPrefix(prefix) else { return nil }
+    return message.dropFirst(prefix.count)
+}
+
 final class OverlayLogic {
     private let config: Config
     private let registryLayerTriggers: [String: String]
@@ -37,15 +68,15 @@ final class OverlayLogic {
 
     var samplesYabaiModifiers: Bool {
         isConnected
-            && currentLayer == "yabai"
-            && visibleLayer == "yabai"
+            && currentLayer == LayerName.yabai
+            && visibleLayer == LayerName.yabai
             && isVisible
     }
 
     var yabaiQualifier: String? {
-        guard isVisible, visibleLayer == "yabai" else { return nil }
+        guard isVisible, visibleLayer == LayerName.yabai else { return nil }
         guard isConnected else { return "Kanata disconnected" }
-        return currentLayer == "yabai" ? nil : "Preview"
+        return currentLayer == LayerName.yabai ? nil : "Preview"
     }
 
     var selectedGeometryProfileId: String? {
@@ -67,7 +98,7 @@ final class OverlayLogic {
                 .map(\.id)
                 ?? []
         )
-        self.hasMineLayerMetadata = keyboardLayers?.layers["mine"] != nil
+        self.hasMineLayerMetadata = keyboardLayers?.layers[LayerName.mine] != nil
         self.geometrySelection = KeyboardGeometrySelection(
             geometry: keyboardLayers?.geometry,
             storedProfileId: storedGeometryProfileId
@@ -92,16 +123,41 @@ final class OverlayLogic {
     }
 
     func showsInputPath(for layer: String) -> Bool {
-        showInputPath && layer == "mine"
+        showInputPath && layer == LayerName.mine
+    }
+
+    /// The input path only exists on the Defy geometries, so it is the selected
+    /// profile that decides whether it can be shown at all.
+    private var isDefyProfileSelected: Bool {
+        guard let selectedGeometryProfileId else { return false }
+        return defyGeometryProfileIds.contains(selectedGeometryProfileId)
     }
 
     private func resetInputPathOutsideDefy() {
-        guard let selectedGeometryProfileId,
-              defyGeometryProfileIds.contains(selectedGeometryProfileId)
-        else {
+        if !isDefyProfileSelected {
             showInputPath = false
-            return
         }
+    }
+
+    /// Collapses the overlay together with every flag that only applies while
+    /// it is on screen. Pinning is deliberately left alone: only the messages
+    /// that unpin clear it.
+    @discardableResult
+    private func resetToHidden() -> OverlayAction {
+        isVisible = false
+        visibleLayer = nil
+        showFreeModifierSpace = false
+        showInputPath = false
+        return .hide
+    }
+
+    /// Shows `layer` right away, dropping any layer still waiting for the
+    /// reveal delay.
+    private func presentImmediately(_ layer: String) -> OverlayAction {
+        pendingLayer = nil
+        isVisible = true
+        visibleLayer = layer
+        return .show(layer)
     }
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
@@ -117,72 +173,61 @@ final class OverlayLogic {
 
     private func updateLayer(_ layer: String) -> OverlayAction {
         currentLayer = layer
-        if layer != "apps" {
+        if layer != LayerName.apps {
             showFreeModifierSpace = false
         }
-        if isPinned, hasLayer(layer) {
-            pendingLayer = nil
-            guard visibleLayer != layer else { return .none }
-            visibleLayer = layer
-            if isVisible {
-                return .replace(layer)
-            }
-            isVisible = true
-            return .show(layer)
-        }
         if isPinned {
+            return handleWhilePinned(layer)
+        }
+        guard let trigger = trigger(for: layer) else {
+            pendingLayer = nil
+            return resetToHidden()
+        }
+        if trigger == "manual" {
+            return handleManualTrigger(layer)
+        }
+        if layer == LayerName.yabai, isVisible, visibleLayer == layer {
             pendingLayer = nil
             return .none
         }
-        if let trigger = trigger(for: layer) {
-            if trigger == "manual" {
-                pendingLayer = nil
-                // Hide only if we're currently showing a *different* layer.
-                // A LayerChange to the same layer we're showing is the kanata
-                // multi (push-msg + layer-switch) landing — keep it visible.
-                if isVisible && visibleLayer != layer {
-                    isVisible = false
-                    visibleLayer = nil
-                    showFreeModifierSpace = false
-                    showInputPath = false
-                    return .hide
-                }
-                return .none
-            }
-            if layer == "yabai", isVisible, visibleLayer == layer {
-                pendingLayer = nil
-                return .none
-            }
-            if isVisible, sharesOverlayGroup(visibleLayer, layer) {
-                pendingLayer = nil
-                visibleLayer = layer
-                return .replace(layer)
-            }
-            if sharesOverlayGroup(pendingLayer, layer) {
-                pendingLayer = layer
-                return .retargetDelay(layer)
-            }
-            pendingLayer = layer
-            return .startDelay(layer)
-        } else {
+        if isVisible, sharesOverlayGroup(visibleLayer, layer) {
             pendingLayer = nil
-            if isVisible {
-                isVisible = false
-                visibleLayer = nil
-                showFreeModifierSpace = false
-                showInputPath = false
-                return .hide
-            }
-            return .hide
+            visibleLayer = layer
+            return .replace(layer)
         }
+        if sharesOverlayGroup(pendingLayer, layer) {
+            pendingLayer = layer
+            return .retargetDelay(layer)
+        }
+        pendingLayer = layer
+        return .startDelay(layer)
+    }
+
+    /// A pinned overlay follows the live layer instead of hiding, as long as
+    /// that layer has something to show.
+    private func handleWhilePinned(_ layer: String) -> OverlayAction {
+        pendingLayer = nil
+        guard hasLayer(layer), visibleLayer != layer else { return .none }
+        if isVisible {
+            visibleLayer = layer
+            return .replace(layer)
+        }
+        return presentImmediately(layer)
+    }
+
+    /// Manual layers only appear through an explicit `cheatsheet-*` message, so
+    /// a layer change can merely retire a *different* visible layer.
+    private func handleManualTrigger(_ layer: String) -> OverlayAction {
+        pendingLayer = nil
+        // A LayerChange to the same layer we're showing is the kanata multi
+        // (push-msg + layer-switch) landing — keep it visible.
+        guard isVisible, visibleLayer != layer else { return .none }
+        return resetToHidden()
     }
 
     func delayExpired() -> OverlayAction {
         guard let pendingLayer else { return .none }
-        self.pendingLayer = nil
-        isVisible = true
-        visibleLayer = pendingLayer
-        return .show(pendingLayer)
+        return presentImmediately(pendingLayer)
     }
 
     func handleMessage(_ message: String) -> OverlayAction {
@@ -197,102 +242,106 @@ final class OverlayLogic {
     }
 
     private func updateMessage(_ message: String) -> OverlayAction {
-        if message.hasPrefix("cheatsheet-geometry-select:") {
-            let id = String(message.dropFirst("cheatsheet-geometry-select:".count))
-            guard let selected = geometrySelection.select(id) else { return .none }
-            resetInputPathOutsideDefy()
-            return .geometryChanged(
-                id: selected,
-                refreshVisibleOverlay: isVisible,
-                persistSelection: false
-            )
+        if let id = payload(of: OverlayMessage.geometrySelectPrefix, in: message) {
+            return selectGeometry(id: String(id))
         }
-        if message.hasPrefix("cheatsheet-pin-toggle:") {
-            if isPinned {
-                isPinned = false
-                pendingLayer = nil
-                showFreeModifierSpace = false
-                showInputPath = false
-                isVisible = false
-                visibleLayer = nil
-                return .hide
-            }
-            let layer = String(message.dropFirst("cheatsheet-pin-toggle:".count))
-            guard hasLayer(layer) else { return .none }
-            pendingLayer = nil
-            isPinned = true
-            isVisible = true
-            visibleLayer = layer
-            showInputPath = false
-            return .show(layer)
+        if let layer = payload(of: OverlayMessage.pinTogglePrefix, in: message) {
+            return togglePin(layer: String(layer))
         }
-        if message.hasPrefix("cheatsheet-show:") {
-            let layer = String(message.dropFirst("cheatsheet-show:".count))
-            guard hasLayer(layer) else { return .none }
-            if layer != "apps" {
-                showFreeModifierSpace = false
-            }
-            pendingLayer = nil
-            isVisible = true
-            visibleLayer = layer
-            return .show(layer)
+        if let layer = payload(of: OverlayMessage.showPrefix, in: message) {
+            return showLayer(String(layer))
         }
         switch message {
-        case "cheatsheet-geometry-toggle":
-            guard let id = geometrySelection.toggle() else { return .none }
-            resetInputPathOutsideDefy()
-            return .geometryChanged(
-                id: id,
-                refreshVisibleOverlay: isVisible,
-                persistSelection: true
-            )
-        case "cheatsheet-space-toggle-free":
-            guard isVisible, visibleLayer == "apps" else { return .none }
-            showFreeModifierSpace.toggle()
-            return .refresh
-        case "cheatsheet-input-path-toggle":
-            guard isVisible,
-                  isPinned,
-                  hasMineLayerMetadata,
-                  let selectedGeometryProfileId,
-                  defyGeometryProfileIds.contains(selectedGeometryProfileId)
-            else { return .none }
-            showInputPath.toggle()
-            return .refresh
-        case "cheatsheet-show":
-            guard let layer = currentLayer, hasLayer(layer) else { return .none }
-            pendingLayer = nil
-            isVisible = true
-            visibleLayer = layer
-            return .show(layer)
-        case "cheatsheet-hide":
-            pendingLayer = nil
-            isPinned = false
-            showFreeModifierSpace = false
-            showInputPath = false
-            if isVisible {
-                isVisible = false
-                visibleLayer = nil
-                return .hide
-            }
-            return .none
-        case "cheatsheet-toggle":
-            if isVisible {
-                isVisible = false
-                visibleLayer = nil
-                pendingLayer = nil
-                showFreeModifierSpace = false
-                showInputPath = false
-                return .hide
-            }
-            guard let layer = currentLayer, hasLayer(layer) else { return .none }
-            pendingLayer = nil
-            isVisible = true
-            visibleLayer = layer
-            return .show(layer)
+        case OverlayMessage.geometryToggle:
+            return toggleGeometry()
+        case OverlayMessage.spaceToggleFree:
+            return toggleFreeModifierSpace()
+        case OverlayMessage.inputPathToggle:
+            return toggleInputPath()
+        case OverlayMessage.show:
+            return showCurrentLayer()
+        case OverlayMessage.hide:
+            return unpinAndHide()
+        case OverlayMessage.toggle:
+            return toggleCurrentLayer()
         default:
             return .none
         }
+    }
+
+    private func selectGeometry(id: String) -> OverlayAction {
+        guard let selected = geometrySelection.select(id) else { return .none }
+        resetInputPathOutsideDefy()
+        return .geometryChanged(
+            id: selected,
+            refreshVisibleOverlay: isVisible,
+            persistSelection: false
+        )
+    }
+
+    private func toggleGeometry() -> OverlayAction {
+        guard let id = geometrySelection.toggle() else { return .none }
+        resetInputPathOutsideDefy()
+        return .geometryChanged(
+            id: id,
+            refreshVisibleOverlay: isVisible,
+            persistSelection: true
+        )
+    }
+
+    private func togglePin(layer: String) -> OverlayAction {
+        if isPinned {
+            isPinned = false
+            pendingLayer = nil
+            return resetToHidden()
+        }
+        guard hasLayer(layer) else { return .none }
+        isPinned = true
+        showInputPath = false
+        return presentImmediately(layer)
+    }
+
+    private func showLayer(_ layer: String) -> OverlayAction {
+        guard hasLayer(layer) else { return .none }
+        if layer != LayerName.apps {
+            showFreeModifierSpace = false
+        }
+        return presentImmediately(layer)
+    }
+
+    private func showCurrentLayer() -> OverlayAction {
+        guard let currentLayer, hasLayer(currentLayer) else { return .none }
+        return presentImmediately(currentLayer)
+    }
+
+    private func toggleCurrentLayer() -> OverlayAction {
+        guard isVisible else { return showCurrentLayer() }
+        pendingLayer = nil
+        return resetToHidden()
+    }
+
+    private func unpinAndHide() -> OverlayAction {
+        let wasVisible = isVisible
+        pendingLayer = nil
+        isPinned = false
+        resetToHidden()
+        return wasVisible ? .hide : .none
+    }
+
+    private func toggleFreeModifierSpace() -> OverlayAction {
+        guard isVisible, visibleLayer == LayerName.apps else { return .none }
+        showFreeModifierSpace.toggle()
+        return .refresh
+    }
+
+    private func toggleInputPath() -> OverlayAction {
+        guard isVisible,
+              isPinned,
+              hasMineLayerMetadata,
+              isDefyProfileSelected
+        else { return .none }
+        showInputPath.toggle()
+        return .refresh
     }
 
     func handleConnectionChange(_ connected: Bool) -> OverlayAction {
@@ -330,7 +379,7 @@ final class OverlayLogic {
         if action == .none,
            presentationChanged,
            isVisible,
-           visibleLayer == "yabai"
+           visibleLayer == LayerName.yabai
         {
             return .refresh
         }
@@ -348,6 +397,7 @@ final class OverlayController {
     private let defaults: UserDefaults
     private let modifierFlags: () -> UInt
     private let pomodoroStatusReader: () -> PomodoroStatus?
+    private let presentsPanels: Bool
     private var panel: OverlayPanel?
     private var hostView: NSHostingView<KeyboardView>?
     private var delayTimer: Timer?
@@ -358,18 +408,23 @@ final class OverlayController {
 
     var isModifierTimerRunning: Bool { modifierTimer != nil }
 
+    /// `presentsPanels: false` builds every panel exactly as usual but never
+    /// puts one on screen, so tests can inspect the real presentation without
+    /// flashing an overlay over whatever the user is doing.
     init(
         config: Config,
         registryResult: Result<KeybindingRegistry, Error>,
         defaults: UserDefaults = .standard,
         modifierFlags: @escaping () -> UInt = { NSEvent.modifierFlags.rawValue },
-        pomodoroStatusReader: @escaping () -> PomodoroStatus? = { PomodoroStatus.read() }
+        pomodoroStatusReader: @escaping () -> PomodoroStatus? = { PomodoroStatus.read() },
+        presentsPanels: Bool = true
     ) {
         self.config = config
         self.registry = try? registryResult.get()
         self.defaults = defaults
         self.modifierFlags = modifierFlags
         self.pomodoroStatusReader = pomodoroStatusReader
+        self.presentsPanels = presentsPanels
         let storedProfileId = defaults.string(
             forKey: KeyboardGeometrySelection.defaultsKey
         )
@@ -396,24 +451,29 @@ final class OverlayController {
     }
 
     func handleLayerChange(_ layer: String) {
-        let wasSamplingYabaiModifiers = logic.samplesYabaiModifiers
+        let wasSampling = logic.samplesYabaiModifiers
         let action = logic.handleLayerChange(layer)
-        if !wasSamplingYabaiModifiers,
-           logic.samplesYabaiModifiers,
-           action == .refresh
-        {
+        let startedSampling = !wasSampling && logic.samplesYabaiModifiers
+        let stoppedSampling = wasSampling && !logic.samplesYabaiModifiers
+
+        if startedSampling, action == .refresh {
+            // Seed the glyphs from the live flags so the refresh paints the
+            // modifiers that are already held down.
             _ = logic.handleModifierFlags(modifierFlags())
             executeAction(action, refitRefresh: false)
-        } else {
-            executeAction(action)
-            if wasSamplingYabaiModifiers,
-               !logic.samplesYabaiModifiers,
-               logic.isVisible,
-               logic.visibleLayer == "yabai",
-               case .startDelay = action
-            {
-                refreshOverlay(refit: false)
-            }
+            return
+        }
+
+        executeAction(action)
+
+        if stoppedSampling,
+           logic.isVisible,
+           logic.visibleLayer == LayerName.yabai,
+           case .startDelay = action
+        {
+            // The Yabai overlay stays on screen behind the new layer's delay;
+            // repaint it so its now-stale modifier glyphs disappear.
+            refreshOverlay(refit: false)
         }
     }
 
@@ -423,7 +483,7 @@ final class OverlayController {
     }
 
     func handleMessage(_ message: String) {
-        let preservesPendingDelay = message.hasPrefix("cheatsheet-geometry-select:")
+        let preservesPendingDelay = message.hasPrefix(OverlayMessage.geometrySelectPrefix)
         if !preservesPendingDelay {
             delayTimer?.invalidate()
             delayTimer = nil
@@ -506,7 +566,7 @@ final class OverlayController {
     }
 
     private func synchronizePomodoroTimer() {
-        guard currentLayer == "pomodoro", panel != nil else {
+        guard currentLayer == LayerName.pomodoro, panel != nil else {
             pomodoroTimer?.invalidate()
             pomodoroTimer = nil
             return
@@ -521,7 +581,7 @@ final class OverlayController {
     }
 
     private func samplePomodoroStatus() {
-        guard currentLayer == "pomodoro", panel != nil else { return }
+        guard currentLayer == LayerName.pomodoro, panel != nil else { return }
         let status = pomodoroStatusReader()
         guard status != pomodoroStatus else { return }
         pomodoroStatus = status
@@ -541,9 +601,9 @@ final class OverlayController {
 
         hideOverlay()
         currentLayer = layerName
-        pomodoroStatus = layerName == "pomodoro" ? pomodoroStatusReader() : nil
+        pomodoroStatus = layerName == LayerName.pomodoro ? pomodoroStatusReader() : nil
 
-        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let screen = targetScreen()
 
         let view = makeKeyboardView(layerName: layerName)
         let hostView = NSHostingView(rootView: view)
@@ -553,12 +613,7 @@ final class OverlayController {
         panel.contentView = hostView
         panel.alphaValue = 0
 
-        panel.orderFrontRegardless()
-
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = Double(config.display.fade_in_ms) / 1000.0
-            panel.animator().alphaValue = CGFloat(config.display.opacity)
-        }
+        fadeIn(panel)
 
         self.panel = panel
         self.hostView = hostView
@@ -589,8 +644,10 @@ final class OverlayController {
         hostView.rootView = makeKeyboardView(layerName: currentLayer)
 
         if refit {
-            let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
-            panel.setFrame(fit(hostView, on: screen), display: true)
+            panel.setFrame(
+                fit(hostView, on: targetScreen(preferring: panel.screen)),
+                display: true
+            )
         }
     }
 
@@ -600,12 +657,21 @@ final class OverlayController {
             let panel
         else { return }
         currentLayer = layerName
-        pomodoroStatus = layerName == "pomodoro" ? pomodoroStatusReader() : nil
+        pomodoroStatus = layerName == LayerName.pomodoro ? pomodoroStatusReader() : nil
         hostView.rootView = makeKeyboardView(layerName: layerName)
 
-        let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
-        panel.setFrame(fit(hostView, on: screen), display: true)
+        panel.setFrame(
+            fit(hostView, on: targetScreen(preferring: panel.screen)),
+            display: true
+        )
         Log.info("Replacing overlay content for layer: \(layerName)")
+    }
+
+    /// The screen the overlay belongs on: the panel's own screen while it has
+    /// one, otherwise the active screen, falling back to the first attached
+    /// screen so there is always a frame to fit into.
+    private func targetScreen(preferring screen: NSScreen? = nil) -> NSScreen {
+        screen ?? NSScreen.main ?? NSScreen.screens[0]
     }
 
     private func fit(
@@ -634,15 +700,43 @@ final class OverlayController {
         guard let panel = self.panel else { return }
         currentLayer = nil
 
+        fadeOut(panel)
+
+        self.panel = nil
+        self.hostView = nil
+        Log.debug("Hiding overlay")
+    }
+
+    /// Reveals `panel` at the configured opacity. A headless controller keeps
+    /// it off screen and lands on the final opacity straight away instead of
+    /// animating towards it.
+    private func fadeIn(_ panel: OverlayPanel) {
+        let opacity = CGFloat(config.display.opacity)
+        guard presentsPanels else {
+            panel.alphaValue = opacity
+            return
+        }
+        panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Double(config.display.fade_in_ms) / 1000.0
+            panel.animator().alphaValue = opacity
+        }
+    }
+
+    /// Retires `panel`. A headless controller applies the faded-out state and
+    /// runs the animation's completion work synchronously, so the panel is
+    /// already retired when this returns.
+    private func fadeOut(_ panel: OverlayPanel) {
+        guard presentsPanels else {
+            panel.alphaValue = 0
+            panel.orderOut(nil)
+            return
+        }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Double(config.display.fade_out_ms) / 1000.0
             panel.animator().alphaValue = 0
         }, completionHandler: {
             panel.orderOut(nil)
         })
-
-        self.panel = nil
-        self.hostView = nil
-        Log.debug("Hiding overlay")
     }
 }
