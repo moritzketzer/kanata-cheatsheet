@@ -167,6 +167,9 @@ enum KeyboardPresentedGeometry: Equatable {
 
 
 struct KeyboardLayerPresentation: Equatable {
+    static let yabaiLayerName = "yabai"
+    static let pomodoroLayerName = "pomodoro"
+
     let name: String
     let label: String
     let trigger: String
@@ -174,6 +177,9 @@ struct KeyboardLayerPresentation: Equatable {
     let geometry: KeyboardPresentedGeometry
     let groups: [KeyboardPresentedGroup]
     var footer: RegistryLayerFooter? = nil
+
+    var isYabaiLayer: Bool { name == Self.yabaiLayerName }
+    var isPomodoroLayer: Bool { name == Self.pomodoroLayerName }
 
     init(
         name: String,

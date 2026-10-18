@@ -1,38 +1,6 @@
 import SwiftUI
 
 
-extension Color {
-    init(hex: String) {
-        let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        var int: UInt64 = 0
-        Scanner(string: cleaned).scanHexInt64(&int)
-
-        let red: Double
-        let green: Double
-        let blue: Double
-        let alpha: Double
-        switch cleaned.count {
-        case 6:
-            red = Double((int >> 16) & 0xFF) / 255
-            green = Double((int >> 8) & 0xFF) / 255
-            blue = Double(int & 0xFF) / 255
-            alpha = 1
-        case 8:
-            red = Double((int >> 24) & 0xFF) / 255
-            green = Double((int >> 16) & 0xFF) / 255
-            blue = Double((int >> 8) & 0xFF) / 255
-            alpha = Double(int & 0xFF) / 255
-        default:
-            red = 1
-            green = 0
-            blue = 1
-            alpha = 1
-        }
-        self.init(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
-    }
-}
-
-
 private struct YabaiLayerEnvironmentKey: EnvironmentKey {
     static let defaultValue = false
 }
