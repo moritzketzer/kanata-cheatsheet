@@ -324,7 +324,7 @@ private struct RegistryLayerProjectionBuilder {
     }
 
     func presentation(
-        profile: RegistryKeyboardGeometryProfile
+        for profile: RegistryKeyboardGeometryProfile
     ) -> KeyboardLayerPresentation? {
         guard let presentedGeometry = presentedGeometry(for: profile) else { return nil }
         return KeyboardLayerPresentation(
@@ -506,9 +506,8 @@ private struct RegistryLayerProjectionBuilder {
     ) -> KeyboardPresentedKey {
         let cell = layer.cells[position.position]
         let isPassthrough = cell?.group == Self.passthroughGroupID
-        let freeMineKey = cell == nil && showFree && !showBaseKeys
-            ? position.mineKey
-            : nil
+        let showsFreeSlotHint = cell == nil && showFree && !showBaseKeys
+        let freeMineKey = showsFreeSlotHint ? position.mineKey : nil
         let badge = canonicalBadge(
             for: position,
             cell: cell,
@@ -522,7 +521,7 @@ private struct RegistryLayerProjectionBuilder {
         return KeyboardPresentedKey(
             id: position.position,
             width: position.width,
-            badge: badge.map { position.badge ?? $0 },
+            badge: badge,
             actionLabel: isPassthrough ? nil : cell?.actionLabel,
             freeLabel: freeMineKey == nil ? nil : "Free",
             colorHex: isPassthrough
@@ -546,21 +545,23 @@ private struct RegistryLayerProjectionBuilder {
         freeMineKey: String?,
         useNamedBadge: Bool
     ) -> String? {
+        let resolved: String?
         if useNamedBadge {
-            return position.namedKey
+            resolved = position.namedKey
+        } else if showBaseKeys {
+            resolved = position.mineKey ?? position.namedKey
+        } else {
+            resolved = cell?.displayKey ?? freeMineKey
         }
-        if showBaseKeys {
-            return position.mineKey ?? position.namedKey
-        }
-        return cell?.displayKey ?? freeMineKey
+        // A position-level `badge` overrides whichever source won, but only
+        // where a badge is shown at all.
+        return resolved.map { position.badge ?? $0 }
     }
 
     private func cellContent(for cell: RegistryKeyboardCell?) -> CellContent {
         guard let presentation = cell?.presentation else {
             return CellContent(
-                primary: cell?.icon.map {
-                    RegistryKeyVisual(kind: $0.kind, token: $0.token)
-                },
+                primary: cell?.icon,
                 holdModifier: nil,
                 explanation: cell?.actionLabel,
                 actionModifier: nil
@@ -657,7 +658,7 @@ enum KeyboardLayerProjector {
                 geometry: geometry,
                 showFree: showFree,
                 activeModifiers: activeModifiers
-            ).presentation(profile: profile)
+            ).presentation(for: profile)
         }
         return legacyPresentation(layerName: layerName, legacyLayer: legacyLayer)
     }

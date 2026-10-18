@@ -48,7 +48,10 @@ struct MacBookGeometryView: View {
 
     private func bottomRow(_ row: [KeyboardPresentedKey]) -> some View {
         let widths = metrics.macBookKeyWidths(
-            unitWidths: row.map(\.width) + [1, 1, 1],
+            unitWidths: row.map(\.width) + Array(
+                repeating: 1,
+                count: KeyboardGeometryMetrics.arrowClusterColumns
+            ),
             targetWidth: contentWidth
         )
         let arrowWidth = widths.last ?? metrics.keySize

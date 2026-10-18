@@ -111,7 +111,7 @@ struct LegacyKeyboardGeometryView: View {
                 Color.clear.frame(width: metrics.keySize, height: metrics.keySize)
             }
             GridRow {
-                ForEach(arrows.allKeys.filter { $0.id != arrows.up.id }, id: \.viewID) { key in
+                ForEach([arrows.left, arrows.down, arrows.right], id: \.viewID) { key in
                     KeyCell(
                         key: key,
                         source: source,

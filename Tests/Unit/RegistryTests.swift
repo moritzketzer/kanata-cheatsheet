@@ -869,11 +869,11 @@ struct RegistryTests {
         #expect(keyboardLayers.layers["mine"]?.showBaseKeys == true)
         #expect(
             keyboardLayers.layers["apps"]?.cells["KeyW"]?.icon
-                == RegistryKeyIcon(kind: "app-font", token: ":finder:")
+                == RegistryKeyVisual(kind: "app-font", token: ":finder:")
         )
         #expect(
             keyboardLayers.layers["apps"]?.cells["IntlBackslash"]?.icon
-                == RegistryKeyIcon(kind: "sf-symbol", token: "scroll")
+                == RegistryKeyVisual(kind: "sf-symbol", token: "scroll")
         )
         #expect(keyboardLayers.layers["apps"]?.overlayGroup == "apps")
         #expect(keyboardLayers.layers["apps-alt"]?.overlayGroup == "apps")
@@ -1302,11 +1302,17 @@ struct RegistryTests {
         )
     }
 
-    @Test("provider and ownership filters compose")
-    func filtersCompose() throws {
+    @Test("search also reaches provider and ownership")
+    func searchCoversProviderAndOwnership() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let query = RegistryQuery(provider: "aerc", ownership: "observed")
-        #expect(query.filter(registry).map(\.id) == ["aerc.compose-review.send"])
+        #expect(
+            RegistryQuery(search: "macos-symbolic-hotkeys").filter(registry).map(\.id)
+                == ["macos.spotlight"]
+        )
+        #expect(
+            RegistryQuery(search: "observed").filter(registry).map(\.id)
+                == ["aerc.compose-review.send"]
+        )
     }
 
     @Test("Explorer defaults to its projection while search remains global")

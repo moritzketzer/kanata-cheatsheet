@@ -158,11 +158,11 @@ struct KeyboardGeometryLayoutTests {
         ]
 
         #expect(
-            leftBottom.map { DefySlotRenderKind(slot: $0).isVacancy }
+            leftBottom.map { DefySlotRenderKind(slot: $0) == .vacancy }
                 == [false, false, false, false, false, false, true]
         )
         #expect(
-            rightBottom.map { DefySlotRenderKind(slot: $0).isVacancy }
+            rightBottom.map { DefySlotRenderKind(slot: $0) == .vacancy }
                 == [true, false, false, false, false, false, false]
         )
         #expect(

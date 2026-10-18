@@ -35,23 +35,29 @@ struct DefyGeometryView: View {
         }
     }
 
+    /// The measured thumb fan only fits halves whose slots carry the physical
+    /// IDs it is drawn from, which is a property of both halves at once.
+    private var usesMeasuredFan: Bool {
+        DefyThumbGeometry.isIdentified(left: left.thumbs, right: right.thumbs)
+    }
+
     @ViewBuilder
     private func half(
         _ half: KeyboardPresentedDefyHalf,
         side: KeyboardHalfSide
     ) -> some View {
-        if DefyThumbGeometry.isIdentified(left: left.thumbs, right: right.thumbs) {
-            let thumbs = DefyThumbGeometry(side: side, keySize: metrics.keySize)
+        if usesMeasuredFan {
+            let fanGeometry = DefyThumbGeometry(side: side, keySize: metrics.keySize)
             ZStack(alignment: .topLeading) {
                 mainBody(half, side: side)
                     .offset(x: side == .left ? 0 : metrics.defyHalfWidth - metrics.defyMainWidth)
                 DefyThumbFan(
-                    thumbs: half.thumbs, side: side, source: source,
+                    thumbs: half.thumbs, fanGeometry: fanGeometry, source: source,
                     metrics: metrics, showInputPath: showInputPath
                 )
                 .offset(
                     x: side == .left ? metrics.defyThumbOrigin.x
-                        : metrics.defyHalfWidth - metrics.defyThumbOrigin.x - thumbs.size.width,
+                        : metrics.defyHalfWidth - metrics.defyThumbOrigin.x - fanGeometry.size.width,
                     y: metrics.defyThumbOrigin.y
                 )
             }

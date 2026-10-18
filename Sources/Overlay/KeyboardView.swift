@@ -36,7 +36,7 @@ struct KeyboardView: View {
         ) ?? KeyboardLayerPresentation(
             name: layerName,
             label: layerName,
-            trigger: "manual",
+            trigger: Config.Layer.manualTrigger,
             source: .legacy,
             rows: [],
             groups: []
@@ -150,12 +150,8 @@ struct KeyboardView: View {
             keySize: keySize,
             spacing: Self.keySpacing
         )
-        if presentation.isYabaiLayer {
-            geometryView(metrics: metrics)
-                .environment(\.isYabaiLayer, true)
-        } else {
-            geometryView(metrics: metrics)
-        }
+        geometryView(metrics: metrics)
+            .environment(\.isYabaiLayer, presentation.isYabaiLayer)
     }
 
     @ViewBuilder

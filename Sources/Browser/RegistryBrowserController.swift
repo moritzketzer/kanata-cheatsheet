@@ -38,6 +38,9 @@ struct BrowserWindowLogic {
 
 @available(macOS 14, *)
 final class RegistryBrowserController: NSObject, NSWindowDelegate {
+    private static let defaultContentRect = NSRect(x: 0, y: 0, width: 1180, height: 760)
+    private static let minimumContentSize = NSSize(width: 900, height: 560)
+
     private let registryResult: Result<KeybindingRegistry, Error>
     private var logic = BrowserWindowLogic()
     private var window: NSWindow?
@@ -52,13 +55,13 @@ final class RegistryBrowserController: NSObject, NSWindowDelegate {
             let content = RegistryBrowserView(registryResult: registryResult)
             let hostView = NSHostingView(rootView: content)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
+                contentRect: Self.defaultContentRect,
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
                 backing: .buffered,
                 defer: false
             )
             window.title = "Keybinding Registry"
-            window.minSize = NSSize(width: 900, height: 560)
+            window.minSize = Self.minimumContentSize
             window.contentView = hostView
             window.isReleasedWhenClosed = false
             window.delegate = self

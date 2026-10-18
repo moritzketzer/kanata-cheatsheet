@@ -6,6 +6,9 @@ struct KeyboardGeometryMetrics: Equatable {
     static let defyTopThumbCount = 4
     static let defyBottomThumbCount = 4
     static let defyHalfWidthUnits: CGFloat = 536.0 / 68
+    /// Columns the MacBook bottom row reserves for its embedded arrow cluster:
+    /// left, the stacked up/down pair, and right.
+    static let arrowClusterColumns = 3
     // The narrowest thumb must fit its ID and three diagnostic text lines.
     static let defyInputPathMinimumKeySize: CGFloat = 64
     // Readable floor for every geometry, and the factor the input path shares
@@ -70,6 +73,7 @@ struct KeyboardGeometryMetrics: Equatable {
     }
 
     func defyThumbOffsets(for side: KeyboardHalfSide) -> [CGFloat] {
+        // Measured per-thumb vertical stagger, as a fraction of the key size.
         let left = [0.12, 0.04, 0, 0.08].map { keySize * $0 }
         return side == .left ? left : Array(left.reversed())
     }
@@ -114,8 +118,8 @@ struct KeyboardGeometryMetrics: Equatable {
         return max(minimumKeySize, calculated)
     }
 
-    /// The bottom row carries the embedded arrow cluster, so it reserves three
-    /// extra unit widths and three extra gaps.
+    /// The bottom row carries the embedded arrow cluster, so it reserves
+    /// `arrowClusterColumns` extra unit widths and the same number of gaps.
     static func macBookKeySize(
         rows: [[KeyboardPresentedKey]],
         contentWidth: CGFloat,
@@ -125,10 +129,10 @@ struct KeyboardGeometryMetrics: Equatable {
             CGFloat(row.map(\.width).reduce(0, +))
         }
         let ordinaryMaxUnits = rowUnits.max() ?? 1
-        let bottomUnits = (rowUnits.last ?? 0) + 3
+        let bottomUnits = (rowUnits.last ?? 0) + CGFloat(arrowClusterColumns)
         let maxUnits = max(ordinaryMaxUnits, bottomUnits)
         let ordinaryMaxCount = rows.map(\.count).max() ?? 1
-        let bottomCount = (rows.last?.count ?? 0) + 3
+        let bottomCount = (rows.last?.count ?? 0) + arrowClusterColumns
         let gapCount = max(ordinaryMaxCount, bottomCount) - 1
         return (
             contentWidth - CGFloat(max(0, gapCount)) * spacing

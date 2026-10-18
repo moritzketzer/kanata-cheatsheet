@@ -33,6 +33,11 @@ struct PomodoroStatus: Codable, Equatable {
     /// Minutes of dissertation work the Pomodoro day aims for.
     private static let dailyGoalMinutes = 30
 
+    /// Header lines for a missing snapshot: no timer state is known, so only
+    /// the day's goal can be stated.
+    static let unavailableStatusLine = "Timerstatus nicht verfügbar"
+    static let fallbackProgressLine = "Tagesziel Dissertation: \(dailyGoalMinutes) Minuten"
+
     /// A snapshot older than this is treated as stale and discarded.
     private static let maxSnapshotAgeSeconds: Double = 5
 

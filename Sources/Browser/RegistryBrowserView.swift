@@ -222,7 +222,7 @@ private struct RegistryBindingInspector: View {
 
                 inspectorSection("Ownership") {
                     InspectorValue(label: "Provider", value: binding.provider)
-                    InspectorValue(label: "Mode", value: binding.ownership)
+                    InspectorValue(label: "Ownership", value: binding.ownership)
                 }
 
                 inspectorSection("Source") {

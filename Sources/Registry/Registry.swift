@@ -374,14 +374,26 @@ struct RegistryKeyboardCell: Codable, Hashable {
     let sourceKey: String
     let actionLabel: String
     let group: String
-    let icon: RegistryKeyIcon?
+    let icon: RegistryKeyVisual?
     let presentation: RegistryKeyPresentation?
-}
 
-
-struct RegistryKeyIcon: Codable, Hashable {
-    let kind: String
-    let token: String
+    init(
+        bindingId: String,
+        displayKey: String,
+        sourceKey: String,
+        actionLabel: String,
+        group: String,
+        icon: RegistryKeyVisual? = nil,
+        presentation: RegistryKeyPresentation? = nil
+    ) {
+        self.bindingId = bindingId
+        self.displayKey = displayKey
+        self.sourceKey = sourceKey
+        self.actionLabel = actionLabel
+        self.group = group
+        self.icon = icon
+        self.presentation = presentation
+    }
 }
 
 

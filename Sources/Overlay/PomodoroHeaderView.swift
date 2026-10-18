@@ -8,11 +8,11 @@ struct PomodoroHeaderView: View {
     let width: CGFloat
 
     var statusLine: String {
-        status?.statusLine ?? "Timerstatus nicht verfügbar"
+        status?.statusLine ?? PomodoroStatus.unavailableStatusLine
     }
 
     var progressLine: String {
-        status?.progressLine ?? "Tagesziel Dissertation: 30 Minuten"
+        status?.progressLine ?? PomodoroStatus.fallbackProgressLine
     }
 
     var body: some View {

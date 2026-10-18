@@ -1725,7 +1725,7 @@ struct OverlayControllerTests {
             sourceKey: "u",
             actionLabel: "Focused app next window",
             group: "windows",
-            icon: RegistryKeyIcon(kind: "sf-symbol", token: "window.ceiling"),
+            icon: RegistryKeyVisual(kind: "sf-symbol", token: "window.ceiling"),
             presentation: presentation
         )
         var layers = [

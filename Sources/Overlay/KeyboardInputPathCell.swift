@@ -53,6 +53,8 @@ struct KeyboardInputPathCell: View {
         .font(.system(size: primaryFontSize))
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
+        // The inner frame insets the text 3 pt per side on a main key; the
+        // outer one restores the slot's full layout size.
         .frame(width: width - (isThumb ? 0 : 6), height: height)
         .frame(width: width, height: height)
         .accessibilityElement(children: .ignore)

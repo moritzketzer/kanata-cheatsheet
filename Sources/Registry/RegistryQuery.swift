@@ -3,12 +3,6 @@ import Foundation
 
 struct RegistryQuery: Equatable {
     var search = ""
-    var provider: String?
-    var application: String?
-    var mode: String?
-    var layer: String?
-    var ownership: String?
-    var diagnosticsOnly = false
 
     /// `defaultBindingIDs` restricts the result to a curated projection only
     /// while `search` is empty; any search term makes the query global again.
@@ -25,12 +19,6 @@ struct RegistryQuery: Equatable {
                 {
                     return false
                 }
-                if let provider, binding.provider != provider { return false }
-                if let application, binding.context.application != application { return false }
-                if let mode, binding.context.mode != mode { return false }
-                if let layer, binding.context.layer != layer { return false }
-                if let ownership, binding.ownership != ownership { return false }
-                if diagnosticsOnly, binding.diagnosticIds.isEmpty { return false }
                 if !needle.isEmpty, !searchableText(for: binding).contains(needle) {
                     return false
                 }

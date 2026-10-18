@@ -6,8 +6,8 @@ import Testing
 struct RegistryIconLayoutTests {
     @Test("app-font correction centers glyph ink")
     func appFontCorrection() {
-        let safari = RegistryKeyIcon(kind: "app-font", token: ":safari:")
-        let cmux = RegistryKeyIcon(kind: "app-font", token: ":cmux:")
+        let safari = RegistryKeyVisual(kind: "app-font", token: ":safari:")
+        let cmux = RegistryKeyVisual(kind: "app-font", token: ":cmux:")
 
         let safariCorrection = RegistryIconLayout.horizontalCorrection(
             for: safari,
@@ -24,13 +24,13 @@ struct RegistryIconLayoutTests {
 
     @Test("SF Symbols keep their native geometry")
     func sfSymbolCorrection() {
-        let icon = RegistryKeyIcon(kind: "sf-symbol", token: "mic.fill")
+        let icon = RegistryKeyVisual(kind: "sf-symbol", token: "mic.fill")
         #expect(RegistryIconLayout.horizontalCorrection(for: icon, size: 40) == 0)
     }
 
     @Test("missing fonts fall back to the current position")
     func missingFontCorrection() {
-        let icon = RegistryKeyIcon(kind: "app-font", token: ":safari:")
+        let icon = RegistryKeyVisual(kind: "app-font", token: ":safari:")
         #expect(
             RegistryIconLayout.horizontalCorrection(
                 for: icon,

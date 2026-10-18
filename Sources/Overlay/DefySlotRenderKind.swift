@@ -25,9 +25,4 @@ enum DefySlotRenderKind: Equatable {
         }
         self = .key(key)
     }
-
-    var isVacancy: Bool {
-        if case .vacancy = self { return true }
-        return false
-    }
 }

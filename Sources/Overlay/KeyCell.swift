@@ -49,7 +49,7 @@ struct KeyCell: View {
         if let physicalId {
             VStack(spacing: 1) {
                 Text(physicalId)
-                    .font(.system(size: max(6, height * 0.15), weight: .semibold, design: .monospaced))
+                    .font(.system(size: cellFontSize(0.15, floor: 6), weight: .semibold, design: .monospaced))
                     .foregroundStyle(Palette.subtext0)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
@@ -248,7 +248,7 @@ struct KeyCell: View {
                     .minimumScaleFactor(0.5)
             } else {
                 RegistryIcon(
-                    icon: RegistryKeyIcon(kind: primary.kind, token: primary.token),
+                    icon: primary,
                     size: cellFontSize(0.34, floor: 8)
                 )
                 .foregroundStyle(color)
@@ -291,7 +291,7 @@ private struct ExplanationStyle {
 
 @available(macOS 14, *)
 private struct RegistryIcon: View {
-    let icon: RegistryKeyIcon
+    let icon: RegistryKeyVisual
     let size: CGFloat
 
     var body: some View {

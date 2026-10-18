@@ -4,22 +4,21 @@ import SwiftUI
 @available(macOS 14, *)
 struct DefyThumbFan: View {
     let thumbs: KeyboardPresentedDefyThumbRows
-    let side: KeyboardHalfSide
+    let fanGeometry: DefyThumbGeometry
     let source: KeyboardPresentationSource
     let metrics: KeyboardGeometryMetrics
     let showInputPath: Bool
 
     var body: some View {
-        let geometry = DefyThumbGeometry(side: side, keySize: metrics.keySize)
         let slots = (thumbs.top + thumbs.bottom).compactMap { $0 }
         ZStack(alignment: .topLeading) {
-            ForEach(geometry.keys) { key in
+            ForEach(fanGeometry.keys) { key in
                 if let slot = slots.first(where: { $0.physicalId == key.id }) {
                     thumb(key, slot: slot)
                 }
             }
         }
-        .frame(width: geometry.size.width, height: geometry.size.height)
+        .frame(width: fanGeometry.size.width, height: fanGeometry.size.height)
     }
 
     @ViewBuilder
