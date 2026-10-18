@@ -1,19 +1,6 @@
 import SwiftUI
 
 
-private struct YabaiLayerEnvironmentKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-
-private extension EnvironmentValues {
-    var isYabaiLayer: Bool {
-        get { self[YabaiLayerEnvironmentKey.self] }
-        set { self[YabaiLayerEnvironmentKey.self] = newValue }
-    }
-}
-
-
 @available(macOS 14, *)
 struct KeyboardView: View {
     let presentation: KeyboardLayerPresentation
@@ -54,38 +41,10 @@ struct KeyboardView: View {
             rows: [],
             groups: []
         )
-        let screenWidth = NSScreen.main?.frame.width ?? 1440
-        let targetWidth = screenWidth * CGFloat(display.width_percent) / 100
-        let horizontalPadding: CGFloat = 64
-        let contentWidth = targetWidth - horizontalPadding
-        let calculatedKeySize: CGFloat
-        switch presentation.geometry {
-        case .macbook(let rows, _):
-            let rowUnits = rows.map { row in
-                CGFloat(row.map(\.width).reduce(0, +))
-            }
-            let ordinaryMaxUnits = rowUnits.max() ?? 1
-            let bottomUnits = (rowUnits.last ?? 0) + 3
-            let maxUnits = max(ordinaryMaxUnits, bottomUnits)
-            let ordinaryMaxCount = rows.map(\.count).max() ?? 1
-            let bottomCount = (rows.last?.count ?? 0) + 3
-            let gapCount = max(ordinaryMaxCount, bottomCount) - 1
-            calculatedKeySize = (
-                contentWidth - CGFloat(max(0, gapCount)) * Self.keySpacing
-            ) / max(1, maxUnits)
-        case .defy:
-            calculatedKeySize = max(
-                showInputPath ? KeyboardGeometryMetrics.defyInputPathMinimumKeySize : 28,
-                contentWidth / (2 * KeyboardGeometryMetrics.defyHalfWidthUnits + 1.35)
-            )
-        case .legacy(let rows, _, _):
-            let maxRowUnits = rows.map { row in
-                CGFloat(row.map(\.width).reduce(0, +))
-            }.max() ?? 14
-            let maxKeyCount = rows.map(\.count).max() ?? 1
-            let gaps = CGFloat(max(0, maxKeyCount - 1)) * Self.keySpacing
-            calculatedKeySize = (contentWidth - gaps) / max(1, maxRowUnits)
-        }
+        let contentWidth = KeyboardGeometryMetrics.contentWidth(
+            screenWidth: NSScreen.main?.frame.width ?? 1440,
+            widthPercent: display.width_percent
+        )
 
         self.presentation = presentation
         self.config = display
@@ -93,75 +52,28 @@ struct KeyboardView: View {
         self.activeModifiers = activeModifiers
         self.yabaiQualifier = yabaiQualifier
         self.pomodoroStatus = pomodoroStatus
-        self.keySize = max(28, calculatedKeySize)
+        self.keySize = KeyboardGeometryMetrics.keySize(
+            for: presentation.geometry,
+            contentWidth: contentWidth,
+            showInputPath: showInputPath,
+            spacing: Self.keySpacing
+        )
         self.contentWidth = contentWidth
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            if showInputPath {
-                Text("Source")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#e4e4ed"))
-            } else if presentation.name == "yabai" {
-                VStack(spacing: 3) {
-                    Text(presentation.label)
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(hex: "#cba6f7"))
-                        .tracking(4)
-                        .textCase(.uppercase)
-
-                    Text(yabaiQualifier ?? " ")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#6c7086"))
-                        .tracking(0.8)
-                        .frame(height: 11)
-                        .accessibilityHidden(yabaiQualifier == nil)
-                }
-            } else if presentation.name == "pomodoro" {
-                PomodoroHeaderView(
-                    title: presentation.label,
-                    status: pomodoroStatus,
-                    width: contentWidth
-                )
-            } else {
-                Text(presentation.label)
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                    .foregroundColor(Color(hex: "#cba6f7"))
-                    .tracking(4)
-                    .textCase(.uppercase)
-            }
+            headerView
 
             geometryContent
 
-            if presentation.name == "yabai" && !showInputPath {
-                YabaiModifierLegend(activeModifiers: activeModifiers)
-            } else if presentation.hasHoldModifiers && !showInputPath {
-                Text("KEY ↖   TAP ●   HOLD ↘")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color(hex: "#6c7086"))
-                    .tracking(1.2)
-            }
+            holdLegendView
 
-            if !showInputPath && !presentation.groups.isEmpty {
-                HStack(spacing: 24) {
-                    ForEach(presentation.groups) { group in
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color(hex: group.colorHex))
-                                .frame(width: 8, height: 8)
-                            Text(group.id)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(Color(hex: "#6c7086"))
-                        }
-                    }
-                }
-                .padding(.top, 4)
-            }
+            groupLegendView
 
             if !showInputPath, let footer = presentation.footer {
                 Divider()
-                    .overlay(Color(hex: "#45475a"))
+                    .overlay(Palette.surface1)
                 LayerFooterView(footer: footer, availableWidth: contentWidth)
             }
         }
@@ -174,12 +86,71 @@ struct KeyboardView: View {
     }
 
     @ViewBuilder
+    private var headerView: some View {
+        if showInputPath {
+            Text("Source")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Palette.inputPathTitle)
+        } else if presentation.isYabaiLayer {
+            VStack(spacing: 3) {
+                LayerTitleText(label: presentation.label)
+
+                Text(yabaiQualifier ?? " ")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Palette.overlay0)
+                    .tracking(0.8)
+                    .frame(height: 11)
+                    .accessibilityHidden(yabaiQualifier == nil)
+            }
+        } else if presentation.isPomodoroLayer {
+            PomodoroHeaderView(
+                title: presentation.label,
+                status: pomodoroStatus,
+                width: contentWidth
+            )
+        } else {
+            LayerTitleText(label: presentation.label)
+        }
+    }
+
+    @ViewBuilder
+    private var holdLegendView: some View {
+        if presentation.isYabaiLayer && !showInputPath {
+            YabaiModifierLegend(activeModifiers: activeModifiers)
+        } else if presentation.hasHoldModifiers && !showInputPath {
+            Text("KEY ↖   TAP ●   HOLD ↘")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Palette.overlay0)
+                .tracking(1.2)
+        }
+    }
+
+    @ViewBuilder
+    private var groupLegendView: some View {
+        if !showInputPath && !presentation.groups.isEmpty {
+            HStack(spacing: 24) {
+                ForEach(presentation.groups) { group in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color(hex: group.colorHex))
+                            .frame(width: 8, height: 8)
+                        Text(group.id)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Palette.overlay0)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
     private var geometryContent: some View {
         let metrics = KeyboardGeometryMetrics(
             keySize: keySize,
             spacing: Self.keySpacing
         )
-        if presentation.name == "yabai" {
+        if presentation.isYabaiLayer {
             geometryView(metrics: metrics)
                 .environment(\.isYabaiLayer, true)
         } else {
@@ -216,409 +187,5 @@ struct KeyboardView: View {
                 contentWidth: contentWidth
             )
         }
-    }
-}
-
-
-@available(macOS 14, *)
-struct PomodoroHeaderView: View {
-    let title: String
-    let status: PomodoroStatus?
-    let width: CGFloat
-
-    var statusLine: String {
-        status?.statusLine ?? "Timerstatus nicht verfügbar"
-    }
-
-    var progressLine: String {
-        status?.progressLine ?? "Tagesziel Dissertation: 30 Minuten"
-    }
-
-    var body: some View {
-        VStack(spacing: 5) {
-            Text(title)
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                .foregroundStyle(Color(hex: "#cba6f7"))
-                .tracking(4)
-                .textCase(.uppercase)
-
-            Text(statusLine)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Color(hex: status == nil ? "#6c7086" : "#cdd6f4"))
-                .frame(height: 16)
-
-            Text(progressLine)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color(hex: status == nil ? "#6c7086" : "#bac2de"))
-                .frame(height: 14)
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-        .frame(width: width)
-    }
-}
-
-
-@available(macOS 14, *)
-private struct YabaiModifierLegend: View {
-    let activeModifiers: Set<YabaiModifier>
-
-    private let roles: [YabaiModifier] = [
-        .option, .shift, .command, .control,
-    ]
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Text("HOLD")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Color(hex: "#6c7086"))
-                .tracking(1)
-
-            ForEach(roles, id: \.self) { modifier in
-                let isActive = activeModifiers.contains(modifier)
-                HStack(spacing: 4) {
-                    Text(modifier.glyph)
-                        .font(.system(size: 11, weight: .bold))
-                    Text(modifier.roleLabel)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                }
-                .foregroundStyle(Color(hex: modifier.accentHex))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule()
-                        .fill(
-                            isActive
-                                ? Color(hex: modifier.accentHex).opacity(0.22)
-                                : Color(hex: "#1e1e2e").opacity(0.72)
-                        )
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(
-                            Color(hex: modifier.accentHex)
-                                .opacity(isActive ? 0.95 : 0.42),
-                            lineWidth: isActive ? 1.5 : 1
-                        )
-                )
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-
-@available(macOS 14, *)
-struct KeyCell: View {
-    let key: KeyboardPresentedKey
-    let source: KeyboardPresentationSource
-    let width: CGFloat
-    let height: CGFloat
-    var physicalId: String? = nil
-    var showsShell: Bool = true
-    var uniformThumbLayout: Bool = false
-
-    @Environment(\.isYabaiLayer) private var isYabaiLayer
-
-    private var isOccupied: Bool {
-        if source == .registry {
-            return key.primary != nil || key.keyLabel != nil
-        }
-        return key.actionLabel != nil || key.keyLabel != nil
-    }
-
-    private var color: Color {
-        key.colorHex.map(Color.init(hex:)) ?? Color(hex: "#cdd6f4")
-    }
-
-    var fillColor: Color {
-        isOccupied ? color.opacity(0.12) : Color(hex: "#313244").opacity(0.28)
-    }
-
-    var strokeColor: Color {
-        isOccupied ? color.opacity(0.24) : Color(hex: "#cdd6f4").opacity(0.06)
-    }
-
-    var body: some View {
-        content
-            .background(RoundedRectangle(cornerRadius: 6).fill(showsShell ? fillColor : .clear))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(showsShell ? strokeColor : .clear, lineWidth: 1))
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if let physicalId {
-            VStack(spacing: 1) {
-                Text(physicalId)
-                    .font(.system(size: max(6, height * 0.15), weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color(hex: "#a6adc8"))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                actionContent
-            }
-            .frame(width: width, height: height)
-        } else {
-            ordinaryContent
-        }
-    }
-
-    private var ordinaryContent: some View {
-        ZStack(alignment: .topLeading) {
-            if let badge = key.badge {
-                Text(badge)
-                    .font(.system(
-                        size: height * 0.15,
-                        weight: .semibold,
-                        design: .monospaced
-                    ))
-                    .foregroundStyle(
-                        isOccupied
-                            ? Color(hex: "#a6adc8")
-                            : Color(hex: "#585b70")
-                    )
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-                    .padding(5)
-            }
-
-            actionContent
-        }
-        .frame(width: width, height: height)
-    }
-
-    @ViewBuilder
-    private var actionContent: some View {
-        if source == .registry {
-            registryContent
-        } else {
-            legacyContent
-        }
-    }
-
-    @ViewBuilder
-    private var registryContent: some View {
-        if isYabaiLayer {
-            yabaiRegistryContent
-        } else {
-            standardRegistryContent
-        }
-    }
-
-    private var standardRegistryContent: some View {
-        ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: physicalId == nil ? 3 : 1) {
-                Spacer(minLength: physicalId == nil ? 5 : 0)
-                primaryContent
-                    .frame(height: uniformThumbLayout ? height * 0.38 : nil)
-                if let explanation = key.explanation {
-                    Text(explanation)
-                        .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .medium))
-                        .foregroundStyle(Color(hex: "#bac2de"))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                } else if let freeLabel = key.freeLabel {
-                    Text(freeLabel)
-                        .font(.system(size: height * 0.13, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#585b70"))
-                }
-                Spacer(minLength: physicalId == nil ? 5 : 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, physicalId == nil ? 4 : 1)
-
-            if let modifier = key.holdModifier,
-               let glyph = KeyboardVisualSemantics.modifierGlyph(modifier)
-            {
-                Text(glyph)
-                    .font(.system(size: height * 0.15, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#cdd6f4"))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(hex: "#1e1e2e").opacity(0.9))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(Color(hex: "#7f849c"), lineWidth: 1)
-                    )
-                    .padding(5)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var yabaiRegistryContent: some View {
-        ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: physicalId == nil ? 3 : 0) {
-                Spacer(minLength: physicalId == nil ? 5 : 0)
-                primaryContent
-                    .frame(height: uniformThumbLayout ? height * 0.38 : nil)
-                if let explanation = key.explanation {
-                    Text(explanation)
-                        .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .medium))
-                        .foregroundStyle(
-                            key.actionModifier == nil
-                                ? Color(hex: "#bac2de")
-                                : color
-                        )
-                        .lineLimit(physicalId == nil && isYabaiLayer ? 2 : 1)
-                        .minimumScaleFactor(0.5)
-                        .multilineTextAlignment(.center)
-                        .frame(height: isYabaiLayer ? height * 0.24 : nil)
-                } else if let freeLabel = key.freeLabel {
-                    Text(freeLabel)
-                        .font(.system(size: height * 0.13, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#585b70"))
-                }
-                Spacer(
-                    minLength: physicalId != nil ? 0
-                        : (isYabaiLayer && key.holdModifier != nil ? height * 0.26 : 5)
-                )
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, physicalId == nil ? 4 : 1)
-            .padding(.trailing, physicalId != nil && (key.actionModifier != nil || key.holdModifier != nil) ? 7 : 0)
-
-            if let actionModifier = key.actionModifier {
-                Text(actionModifier.glyph)
-                    .font(.system(size: physicalId == nil ? height * 0.12 : max(3.5, height * 0.12), weight: .bold))
-                    .foregroundStyle(Color(hex: actionModifier.accentHex))
-                    .padding(.horizontal, physicalId == nil ? 4 : 1)
-                    .padding(.vertical, physicalId == nil ? 1 : 0.25)
-                    .background(
-                        Circle()
-                            .fill(Color(hex: "#1e1e2e").opacity(0.92))
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                Color(hex: actionModifier.accentHex).opacity(0.9),
-                                lineWidth: 1
-                            )
-                    )
-                    .padding(physicalId == nil ? 5 : 1)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .topTrailing
-                    )
-            }
-
-            if let modifier = key.holdModifier,
-               let glyph = KeyboardVisualSemantics.modifierGlyph(modifier)
-            {
-                Text(glyph)
-                    .font(.system(size: physicalId == nil ? height * 0.15 : max(3.5, height * 0.15), weight: .semibold))
-                    .foregroundStyle(
-                        key.isHoldActive
-                            ? Color(hex: "#1e1e2e")
-                            : Color(hex: key.holdAccentHex ?? "#cdd6f4")
-                    )
-                    .padding(.horizontal, physicalId == nil ? 4 : 1)
-                    .padding(.vertical, physicalId == nil ? 1 : 0.25)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(
-                                key.isHoldActive
-                                    ? Color(hex: key.holdAccentHex ?? "#cdd6f4")
-                                        .opacity(0.92)
-                                    : Color(hex: "#1e1e2e").opacity(0.9)
-                            )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(
-                                Color(hex: key.holdAccentHex ?? "#7f849c")
-                                    .opacity(key.isHoldActive ? 1 : 0.72),
-                                lineWidth: key.isHoldActive ? 2 : 1
-                            )
-                    )
-                    .padding(physicalId == nil ? 5 : 1)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private var primaryContent: some View {
-        if let keyLabel = key.keyLabel {
-            Text(keyLabel)
-                .font(.system(
-                    size: height * 0.28,
-                    weight: .semibold,
-                    design: .monospaced
-                ))
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.55)
-        } else if let primary = key.primary {
-            if primary.kind == "glyph" {
-                let scale = KeyboardVisualSemantics.glyphScale(primary.token)
-                Text(primary.token)
-                    .font(.system(
-                        size: physicalId == nil
-                            ? height * (scale == .single ? 0.38 : 0.28)
-                            : max(8, height * (scale == .single ? 0.38 : 0.28)),
-                        weight: .semibold,
-                        design: .monospaced
-                    ))
-                    .foregroundStyle(color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-            } else {
-                RegistryIcon(
-                    icon: RegistryKeyIcon(kind: primary.kind, token: primary.token),
-                    size: physicalId == nil ? height * 0.34 : max(8, height * 0.34)
-                )
-                .foregroundStyle(color)
-            }
-        }
-    }
-
-    private var legacyContent: some View {
-        VStack(spacing: 1) {
-            Text(key.badge ?? "")
-                .font(.system(
-                    size: height * (isOccupied ? 0.27 : 0.23),
-                    weight: isOccupied ? .bold : .regular,
-                    design: .monospaced
-                ))
-                .foregroundStyle(
-                    isOccupied ? color : Color(hex: "#45475a")
-                )
-            if let actionLabel = key.actionLabel {
-                Text(actionLabel)
-                    .font(.system(size: height * 0.18, design: .monospaced))
-                    .foregroundStyle(Color(hex: "#bac2de"))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-
-@available(macOS 14, *)
-private struct RegistryIcon: View {
-    let icon: RegistryKeyIcon
-    let size: CGFloat
-
-    var body: some View {
-        Group {
-            if icon.kind == "app-font" {
-                Text(icon.token)
-                    .font(.custom("sketchybar-app-font", size: size))
-                    .lineLimit(1)
-            } else {
-                Image(systemName: icon.token)
-                    .font(.system(size: size, weight: .medium))
-            }
-        }
-        .offset(
-            x: RegistryIconLayout.horizontalCorrection(for: icon, size: size)
-        )
-        .opacity(RegistryIconLayout.opacity)
     }
 }
