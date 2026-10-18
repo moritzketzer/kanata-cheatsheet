@@ -1279,8 +1279,8 @@ struct RegistryTests {
             return
         }
         let slots = left.thumbs.top + left.thumbs.bottom + right.thumbs.top + right.thumbs.bottom
-        let expected = ["LT1", "LT2", "LT3", "LT4", "LT5", "LT6", "LT7", "LT8",
-                        "RT4", "RT3", "RT2", "RT1", "RT8", "RT7", "RT6", "RT5"]
+        let expected: [String?] = ["LT1", "LT2", "LT3", "LT4", "LT5", "LT6", "LT7", "LT8",
+                                   "RT4", "RT3", "RT2", "RT1", "RT8", "RT7", "RT6", "RT5"]
         #expect(slots.map { $0?.physicalId } == (identified ? expected : Array(repeating: nil, count: 16)))
         #expect(left.thumbs.top[1]?.key?.actionLabel == "Space / Apps")
     }
