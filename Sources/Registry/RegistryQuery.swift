@@ -10,6 +10,8 @@ struct RegistryQuery: Equatable {
     var ownership: String?
     var diagnosticsOnly = false
 
+    /// `defaultBindingIDs` restricts the result to a curated projection only
+    /// while `search` is empty; any search term makes the query global again.
     func filter(
         _ registry: KeybindingRegistry,
         defaultBindingIDs: Set<String>? = nil

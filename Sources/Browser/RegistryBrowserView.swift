@@ -53,12 +53,13 @@ struct RegistryBrowserView: View {
     }
 
     private func browser(_ registry: KeybindingRegistry) -> some View {
-        VStack(spacing: 0) {
+        let bindings = filteredBindings(registry)
+        return VStack(spacing: 0) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(sidebarTitle)
                         .font(.title2.weight(.semibold))
-                    Text("\(filteredBindings(registry).count) bindings")
+                    Text("\(bindings.count) bindings")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -71,11 +72,10 @@ struct RegistryBrowserView: View {
             if sidebarSelection == .modifierSpace {
                 ModifierSpaceBrowserGrid(
                     registry: registry,
-                    matchingBindingIDs: Set(filteredBindings(registry).map(\.id)),
-                    unrecordedOnly: false
+                    matchingBindingIDs: Set(bindings.map(\.id))
                 )
             } else {
-                bindingList(registry)
+                bindingList(registry, bindings: bindings)
             }
         }
         .searchable(
@@ -85,9 +85,12 @@ struct RegistryBrowserView: View {
         )
     }
 
-    private func bindingList(_ registry: KeybindingRegistry) -> some View {
+    private func bindingList(
+        _ registry: KeybindingRegistry,
+        bindings: [RegistryBinding]
+    ) -> some View {
         HSplitView {
-            List(filteredBindings(registry), selection: $selectedBindingID) { binding in
+            List(bindings, selection: $selectedBindingID) { binding in
                 RegistryBindingRow(binding: binding)
                     .tag(binding.id)
             }
@@ -138,11 +141,11 @@ private struct RegistryBindingRow: View {
         HStack(spacing: 12) {
             Text(binding.gesture.display)
                 .font(.system(.body, design: .monospaced, weight: .semibold))
-                .foregroundStyle(Color(hex: "#cba6f7"))
+                .foregroundStyle(Palette.mauve)
                 .frame(width: 120, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(binding.action.label)
-                Text(contextLabel)
+                Text(binding.contextSummary(includingLayer: true))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -159,13 +162,20 @@ private struct RegistryBindingRow: View {
         }
         .padding(.vertical, 3)
     }
+}
 
-    private var contextLabel: String {
-        [
-            binding.provider,
-            binding.context.application,
-            binding.context.mode,
-            binding.context.layer.map { "layer \($0)" },
+
+private extension RegistryBinding {
+    /// Provider and context trail shown under a binding's action label.
+    func contextSummary(includingLayer: Bool) -> String {
+        let layer: String? = includingLayer
+            ? context.layer.map { "layer \($0)" }
+            : nil
+        return [
+            provider,
+            context.application,
+            context.mode,
+            layer,
         ]
         .compactMap { $0 }
         .joined(separator: " · ")
@@ -184,7 +194,7 @@ private struct RegistryBindingInspector: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(binding.gesture.display)
                         .font(.system(size: 28, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#cba6f7"))
+                        .foregroundStyle(Palette.mauve)
                     Text(binding.action.label)
                         .font(.title3.weight(.semibold))
                     if let detail = binding.action.detail {
@@ -287,55 +297,64 @@ private struct InspectorValue: View {
 private struct ModifierSpaceBrowserGrid: View {
     let registry: KeybindingRegistry
     let matchingBindingIDs: Set<String>
-    let unrecordedOnly: Bool
-
-    private var slots: [ModifierSpaceSlot] {
-        unrecordedOnly
-            ? registry.views.modifierSpace.slots.filter(\.isUnrecorded)
-            : registry.views.modifierSpace.slots
-    }
 
     var body: some View {
-        ScrollView {
+        // One lookup table per render beats a linear scan per slot binding.
+        let bindingsByID = Dictionary(
+            registry.bindings.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return ScrollView {
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 180, maximum: 250), spacing: 12)],
                 spacing: 12
             ) {
-                ForEach(slots) { slot in
-                    let bindings = slot.bindingIds.compactMap(registry.binding(withID:))
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(slot.display)
-                            .font(.system(size: 17, weight: .bold, design: .monospaced))
-                            .foregroundStyle(slot.isUnrecorded ? .secondary : Color(hex: "#cba6f7"))
-                        if slot.isUnrecorded {
-                            Text("Not recorded")
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            ForEach(bindings) { binding in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(binding.action.label)
-                                    Text(
-                                        [binding.provider, binding.context.application, binding.context.mode]
-                                            .compactMap { $0 }
-                                            .joined(separator: " · ")
-                                    )
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                }
-                                .opacity(
-                                    matchingBindingIDs.isEmpty || matchingBindingIDs.contains(binding.id)
-                                        ? 1 : 0.28
-                                )
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-                    .padding(14)
-                    .background(.quaternary.opacity(slot.isUnrecorded ? 0.35 : 0.7), in: RoundedRectangle(cornerRadius: 10))
+                ForEach(registry.views.modifierSpace.slots) { slot in
+                    ModifierSpaceSlotCard(
+                        slot: slot,
+                        bindings: slot.bindingIds.compactMap { bindingsByID[$0] },
+                        matchingBindingIDs: matchingBindingIDs
+                    )
                 }
             }
             .padding(20)
         }
+    }
+}
+
+
+@available(macOS 14, *)
+private struct ModifierSpaceSlotCard: View {
+    let slot: ModifierSpaceSlot
+    let bindings: [RegistryBinding]
+    let matchingBindingIDs: Set<String>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(slot.display)
+                .font(.system(size: 17, weight: .bold, design: .monospaced))
+                .foregroundStyle(slot.isUnrecorded ? Color.secondary : Palette.mauve)
+            if slot.isUnrecorded {
+                Text("Not recorded")
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(bindings) { binding in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(binding.action.label)
+                        Text(binding.contextSummary(includingLayer: false))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .opacity(
+                        matchingBindingIDs.isEmpty || matchingBindingIDs.contains(binding.id)
+                            ? 1 : 0.28
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .padding(14)
+        .background(.quaternary.opacity(slot.isUnrecorded ? 0.35 : 0.7), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 

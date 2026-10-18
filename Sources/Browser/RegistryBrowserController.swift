@@ -67,7 +67,7 @@ final class RegistryBrowserController: NSObject, NSWindowDelegate {
         case .raiseExisting:
             break
         }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
 
