@@ -10,7 +10,7 @@ struct ConfigTests {
           "connection": { "host": "localhost", "port": 7070, "reconnect_interval_ms": 3000 },
           "display": {
             "delay_ms": 2000, "fade_in_ms": 150, "fade_out_ms": 100,
-            "opacity": 0.88, "position": "center", "width_percent": 75,
+            "opacity": 0.88, "width_percent": 75,
             "background_color": "#11111be0", "corner_radius": 16
           },
           "layers": {
@@ -46,7 +46,7 @@ struct ConfigTests {
         #expect(config.connection.reconnect_interval_ms == 3000)
         #expect(config.display.delay_ms == 2000)
         #expect(config.display.fade_in_ms == 150)
-        #expect(config.display.position == "center")
+        #expect(config.display.width_percent == 75)
     }
 
     @Test("loads from file path")

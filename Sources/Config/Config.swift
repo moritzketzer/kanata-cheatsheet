@@ -22,21 +22,19 @@ struct Config: Codable {
         var fade_in_ms: Int
         var fade_out_ms: Int
         var opacity: Double
-        var position: String
         var width_percent: Int
         var background_color: String
         var corner_radius: Int
 
         init(
             delay_ms: Int = 2000, fade_in_ms: Int = 150, fade_out_ms: Int = 100,
-            opacity: Double = 0.88, position: String = "center", width_percent: Int = 75,
+            opacity: Double = 0.88, width_percent: Int = 75,
             background_color: String = "#11111be0", corner_radius: Int = 16
         ) {
             self.delay_ms = delay_ms
             self.fade_in_ms = fade_in_ms
             self.fade_out_ms = fade_out_ms
             self.opacity = opacity
-            self.position = position
             self.width_percent = width_percent
             self.background_color = background_color
             self.corner_radius = corner_radius
@@ -44,11 +42,17 @@ struct Config: Codable {
     }
 
     struct Layer: Codable {
+        /// Auto-show once the reveal delay expires.
+        static let delayTrigger = "delay"
+        /// Show only on an explicit `push-msg`.
+        static let manualTrigger = "manual"
+
         var label: String
-        var trigger: String  // "delay" (auto-show after delay) or "manual" (push-msg only)
+        /// Stays a plain `String` so an unrecognised value still decodes.
+        var trigger: String
         var groups: [String: Group]
 
-        init(label: String, trigger: String = "delay", groups: [String: Group] = [:]) {
+        init(label: String, trigger: String = Self.delayTrigger, groups: [String: Group] = [:]) {
             self.label = label
             self.trigger = trigger
             self.groups = groups
@@ -124,7 +128,6 @@ extension Config.Display {
         self.fade_in_ms = try container.decodeIfPresent(Int.self, forKey: .fade_in_ms) ?? defaults.fade_in_ms
         self.fade_out_ms = try container.decodeIfPresent(Int.self, forKey: .fade_out_ms) ?? defaults.fade_out_ms
         self.opacity = try container.decodeIfPresent(Double.self, forKey: .opacity) ?? defaults.opacity
-        self.position = try container.decodeIfPresent(String.self, forKey: .position) ?? defaults.position
         self.width_percent = try container.decodeIfPresent(Int.self, forKey: .width_percent) ?? defaults.width_percent
         self.background_color = try container.decodeIfPresent(String.self, forKey: .background_color)
             ?? defaults.background_color

@@ -50,8 +50,7 @@ private func payload(of prefix: String, in message: String) -> Substring? {
 }
 
 final class OverlayLogic {
-    private let config: Config
-    private let registryLayerTriggers: [String: String]
+    private let layerTriggers: [String: String]
     private let registryOverlayGroups: [String: String]
     private let defyGeometryProfileIds: Set<String>
     private let hasMineLayerMetadata: Bool
@@ -88,9 +87,14 @@ final class OverlayLogic {
         registry: KeybindingRegistry? = nil,
         storedGeometryProfileId: String? = nil
     ) {
-        self.config = config
         let keyboardLayers = registry?.views.keyboardLayers
-        self.registryLayerTriggers = keyboardLayers?.layers.mapValues(\.trigger) ?? [:]
+        // Wherever the registry and the legacy config both describe a layer,
+        // the registry's trigger wins.
+        self.layerTriggers = config.layers
+            .mapValues(\.trigger)
+            .merging(keyboardLayers?.layers.mapValues(\.trigger) ?? [:]) { _, fromRegistry in
+                fromRegistry
+            }
         self.registryOverlayGroups = keyboardLayers?.layers.compactMapValues(\.overlayGroup) ?? [:]
         self.defyGeometryProfileIds = Set(
             keyboardLayers?.geometry?.effectiveProfiles
@@ -106,7 +110,7 @@ final class OverlayLogic {
     }
 
     private func trigger(for layer: String) -> String? {
-        registryLayerTriggers[layer] ?? config.layers[layer]?.trigger
+        layerTriggers[layer]
     }
 
     private func hasLayer(_ layer: String) -> Bool {
@@ -161,14 +165,7 @@ final class OverlayLogic {
     }
 
     func handleLayerChange(_ layer: String) -> OverlayAction {
-        let previousQualifier = yabaiQualifier
-        let previousModifiers = activeModifiers
-        let action = updateLayer(layer)
-        return finalizeYabaiState(
-            action,
-            previousQualifier: previousQualifier,
-            previousModifiers: previousModifiers
-        )
+        finalizingYabaiState { updateLayer(layer) }
     }
 
     private func updateLayer(_ layer: String) -> OverlayAction {
@@ -183,7 +180,7 @@ final class OverlayLogic {
             pendingLayer = nil
             return resetToHidden()
         }
-        if trigger == "manual" {
+        if trigger == Config.Layer.manualTrigger {
             return handleManualTrigger(layer)
         }
         if layer == LayerName.yabai, isVisible, visibleLayer == layer {
@@ -231,14 +228,7 @@ final class OverlayLogic {
     }
 
     func handleMessage(_ message: String) -> OverlayAction {
-        let previousQualifier = yabaiQualifier
-        let previousModifiers = activeModifiers
-        let action = updateMessage(message)
-        return finalizeYabaiState(
-            action,
-            previousQualifier: previousQualifier,
-            previousModifiers: previousModifiers
-        )
+        finalizingYabaiState { updateMessage(message) }
     }
 
     private func updateMessage(_ message: String) -> OverlayAction {
@@ -345,17 +335,13 @@ final class OverlayLogic {
     }
 
     func handleConnectionChange(_ connected: Bool) -> OverlayAction {
-        let previousQualifier = yabaiQualifier
-        let previousModifiers = activeModifiers
-        isConnected = connected
-        if !connected {
-            currentLayer = nil
+        finalizingYabaiState {
+            isConnected = connected
+            if !connected {
+                currentLayer = nil
+            }
+            return .none
         }
-        return finalizeYabaiState(
-            .none,
-            previousQualifier: previousQualifier,
-            previousModifiers: previousModifiers
-        )
     }
 
     func handleModifierFlags(_ flags: UInt) -> OverlayAction {
@@ -364,6 +350,19 @@ final class OverlayLogic {
         guard modifiers != activeModifiers else { return .none }
         activeModifiers = modifiers
         return .refresh
+    }
+
+    /// Runs `update` between a snapshot of the Yabai-facing presentation and
+    /// `finalizeYabaiState`, which is what turns a silent presentation change
+    /// into a repaint.
+    private func finalizingYabaiState(_ update: () -> OverlayAction) -> OverlayAction {
+        let previousQualifier = yabaiQualifier
+        let previousModifiers = activeModifiers
+        return finalizeYabaiState(
+            update(),
+            previousQualifier: previousQualifier,
+            previousModifiers: previousModifiers
+        )
     }
 
     private func finalizeYabaiState(
@@ -460,7 +459,7 @@ final class OverlayController {
             // Seed the glyphs from the live flags so the refresh paints the
             // modifiers that are already held down.
             _ = logic.handleModifierFlags(modifierFlags())
-            executeAction(action, refitRefresh: false)
+            executeAction(action, refit: false)
             return
         }
 
@@ -479,7 +478,7 @@ final class OverlayController {
 
     func handleConnectionChange(_ connected: Bool) {
         let action = logic.handleConnectionChange(connected)
-        executeAction(action, refitRefresh: false)
+        executeAction(action, refit: false)
     }
 
     func handleMessage(_ message: String) {
@@ -495,7 +494,7 @@ final class OverlayController {
 
     private func executeAction(
         _ action: OverlayAction,
-        refitRefresh: Bool = true
+        refit: Bool = true
     ) {
         defer {
             synchronizeModifierTimer()
@@ -521,7 +520,7 @@ final class OverlayController {
             delayTimer = nil
             hideOverlay()
         case .refresh:
-            refreshOverlay(refit: refitRefresh)
+            refreshOverlay(refit: refit)
         case .geometryChanged(let id, let refreshVisibleOverlay, let persistSelection):
             if persistSelection {
                 defaults.set(id, forKey: KeyboardGeometrySelection.defaultsKey)
@@ -542,7 +541,7 @@ final class OverlayController {
 
     func sampleModifierFlags() {
         let action = logic.handleModifierFlags(modifierFlags())
-        executeAction(action, refitRefresh: false)
+        executeAction(action, refit: false)
     }
 
     private func sampleBeforePresentingLiveYabai() {
@@ -588,16 +587,18 @@ final class OverlayController {
         refreshOverlay(refit: false)
     }
 
-    private func showOverlay(for layerName: String) {
-        guard KeyboardLayerProjector.presentation(
+    private func hasPresentation(for layerName: String) -> Bool {
+        KeyboardLayerProjector.presentation(
             layerName: layerName,
             legacyLayer: config.layers[layerName],
             registry: registry,
             showFree: logic.showFreeModifierSpace,
             geometryProfileId: logic.selectedGeometryProfileId
-        ) != nil else {
-            return
-        }
+        ) != nil
+    }
+
+    private func showOverlay(for layerName: String) {
+        guard hasPresentation(for: layerName) else { return }
 
         hideOverlay()
         currentLayer = layerName

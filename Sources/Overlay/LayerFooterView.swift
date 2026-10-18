@@ -39,10 +39,10 @@ private struct LayerFooterSectionView: View {
                 ) {
                     ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(row.first ?? "")
+                            Text(actionTitle(of: row))
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(Palette.mauve)
-                            Text(row.dropFirst().first ?? "")
+                            Text(actionDetail(of: row))
                                 .font(.system(size: 10, design: .monospaced))
                                 .foregroundStyle(Palette.subtext1)
                                 .lineLimit(2)
@@ -79,6 +79,16 @@ private struct LayerFooterSectionView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A global-actions row names the action in its first column and explains
+    /// it in the second; both are optional in the registry data.
+    private func actionTitle(of row: [String]) -> String {
+        row.first ?? ""
+    }
+
+    private func actionDetail(of row: [String]) -> String {
+        row.dropFirst().first ?? ""
     }
 
     private func cell(_ value: String, weight: Font.Weight, color: Color) -> some View {
