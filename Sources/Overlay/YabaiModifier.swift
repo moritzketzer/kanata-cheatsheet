@@ -7,7 +7,11 @@ enum YabaiModifier: String, CaseIterable, Codable, Hashable {
     case command
     case shift
 
-    var outputMask: UInt {
+    /// Device-dependent Carbon bit of the *left* physical key only; sampling
+    /// just the left hand is intentional, because the Yabai layer binds its
+    /// actions to the left-side modifiers and the right-side twins must not
+    /// light up the overlay.
+    var leftSideDeviceMask: UInt {
         switch self {
         case .control: 0x1
         case .option: 0x20
@@ -44,6 +48,6 @@ enum YabaiModifier: String, CaseIterable, Codable, Hashable {
     }
 
     static func active(in flags: UInt) -> Set<Self> {
-        Set(allCases.filter { flags & $0.outputMask != 0 })
+        Set(allCases.filter { flags & $0.leftSideDeviceMask != 0 })
     }
 }

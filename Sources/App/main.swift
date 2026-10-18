@@ -6,13 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tcpClient: KanataTCPClient?
     private var overlayController: OverlayController?
     private var browserController: RegistryBrowserController?
-    private var config: Config?
-    private var registryResult: Result<KeybindingRegistry, Error>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.info("kanata-cheatsheet starting")
 
         let configPath = Config.defaultConfigPath()
+        let config: Config
         do {
             config = try Config.load(from: configPath)
             Log.info("Loaded config from \(configPath)")
@@ -21,17 +20,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             config = Config()
         }
 
-        guard let config else { return }
-
-        let loadedRegistry: Result<KeybindingRegistry, Error> = Result {
+        let registryResult: Result<KeybindingRegistry, Error> = Result {
             try KeybindingRegistry.load()
         }
-        registryResult = loadedRegistry
-        if case .failure(let error) = loadedRegistry {
+        if case .failure(let error) = registryResult {
             Log.error("Failed to load keybinding registry: \(error)")
         }
-        overlayController = OverlayController(config: config, registryResult: loadedRegistry)
-        browserController = RegistryBrowserController(registryResult: loadedRegistry)
+        overlayController = OverlayController(config: config, registryResult: registryResult)
+        browserController = RegistryBrowserController(registryResult: registryResult)
 
         let client = KanataTCPClient(
             host: config.connection.host,

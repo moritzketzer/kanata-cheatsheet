@@ -19,7 +19,7 @@ struct YabaiModifierTests {
             let expected = Set(modifiers.enumerated().compactMap { index, modifier in
                 leftCombination & (1 << index) == 0 ? nil : modifier
             })
-            let leftFlags = expected.reduce(UInt(0)) { $0 | $1.outputMask }
+            let leftFlags = expected.reduce(UInt(0)) { $0 | $1.leftSideDeviceMask }
 
             for rightCombination in 0..<16 {
                 let rightFlags = rightMasks.enumerated().reduce(UInt(0)) { flags, entry in

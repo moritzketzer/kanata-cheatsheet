@@ -46,10 +46,11 @@ struct TCPParsingTests {
 
     @Test("parses multiple messages from buffer")
     func bufferSplit() throws {
-        let buffer = #"{"LayerChange":{"new":"nav"}}"# + "\n" + #"{"LayerChange":{"new":"mine"}}"# + "\n"
-        let events = KanataEvent.parseBuffer(buffer)
+        var buffer = #"{"LayerChange":{"new":"nav"}}"# + "\n" + #"{"LayerChange":{"new":"mine"}}"# + "\n"
+        let events = KanataEvent.drainEvents(from: &buffer)
         #expect(events.count == 2)
         #expect(events[0] == .layerChange("nav"))
         #expect(events[1] == .layerChange("mine"))
+        #expect(buffer.isEmpty)
     }
 }

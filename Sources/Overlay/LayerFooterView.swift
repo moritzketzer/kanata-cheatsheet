@@ -19,15 +19,19 @@ struct LayerFooterView: View {
 
 @available(macOS 14, *)
 private struct LayerFooterSectionView: View {
+    /// `RegistryLayerFooterSection` is declared in `Registry.swift`; this view
+    /// is the only place that branches on the section id, so the name lives here.
+    private static let globalActionsSectionId = "global-actions"
+
     let section: RegistryLayerFooterSection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(section.title)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Color(hex: "#bac2de"))
+                .foregroundStyle(Palette.subtext1)
 
-            if section.id == "global-actions" {
+            if section.id == Self.globalActionsSectionId {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 180), spacing: 8)],
                     alignment: .leading,
@@ -37,10 +41,10 @@ private struct LayerFooterSectionView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(row.first ?? "")
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(Color(hex: "#cba6f7"))
+                                .foregroundStyle(Palette.mauve)
                             Text(row.dropFirst().first ?? "")
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Color(hex: "#bac2de"))
+                                .foregroundStyle(Palette.subtext1)
                                 .lineLimit(2)
                         }
                         .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
@@ -48,11 +52,11 @@ private struct LayerFooterSectionView: View {
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(Color(hex: "#cba6f7").opacity(0.10))
+                                .fill(Palette.mauve.opacity(0.10))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(hex: "#cba6f7").opacity(0.18), lineWidth: 1)
+                                .stroke(Palette.mauve.opacity(0.18), lineWidth: 1)
                         )
                     }
                 }
@@ -60,13 +64,13 @@ private struct LayerFooterSectionView: View {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
                     GridRow {
                         ForEach(Array(section.columns.enumerated()), id: \.offset) { _, column in
-                            cell(column, weight: .semibold, color: Color(hex: "#cba6f7"))
+                            cell(column, weight: .semibold, color: Palette.mauve)
                         }
                     }
                     ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
                         GridRow {
                             ForEach(Array(row.enumerated()), id: \.offset) { _, value in
-                                cell(value, weight: .regular, color: Color(hex: "#6c7086"))
+                                cell(value, weight: .regular, color: Palette.overlay0)
                             }
                         }
                     }

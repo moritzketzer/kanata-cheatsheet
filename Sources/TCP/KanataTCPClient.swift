@@ -30,10 +30,19 @@ enum KanataEvent: Equatable {
         return .other
     }
 
-    static func parseBuffer(_ buffer: String) -> [KanataEvent] {
-        buffer.split(separator: "\n").compactMap { line in
-            try? parse(from: String(line))
+    /// Consumes every complete newline-terminated line from `buffer` and
+    /// returns the events they parsed into, skipping unparseable lines. A
+    /// trailing partial line stays in `buffer` for the next received chunk.
+    static func drainEvents(from buffer: inout String) -> [KanataEvent] {
+        var events: [KanataEvent] = []
+        while let newlineIndex = buffer.firstIndex(of: "\n") {
+            let line = String(buffer[buffer.startIndex..<newlineIndex])
+            buffer = String(buffer[buffer.index(after: newlineIndex)...])
+            if let event = try? parse(from: line) {
+                events.append(event)
+            }
         }
+        return events
     }
 }
 
@@ -138,12 +147,8 @@ final class KanataTCPClient {
             guard let self, self.connection === conn else { return }
             if let data, let str = String(data: data, encoding: .utf8) {
                 self.buffer += str
-                while let newlineIndex = self.buffer.firstIndex(of: "\n") {
-                    let line = String(self.buffer[self.buffer.startIndex..<newlineIndex])
-                    self.buffer = String(self.buffer[self.buffer.index(after: newlineIndex)...])
-                    if let event = try? KanataEvent.parse(from: line) {
-                        DispatchQueue.main.async { self.delegate?.didReceiveEvent(event) }
-                    }
+                for event in KanataEvent.drainEvents(from: &self.buffer) {
+                    DispatchQueue.main.async { self.delegate?.didReceiveEvent(event) }
                 }
             }
             if isComplete || error != nil {

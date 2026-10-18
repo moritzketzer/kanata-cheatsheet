@@ -83,40 +83,51 @@ struct Config: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.connection = try container.decodeIfPresent(Connection.self, forKey: .connection) ?? Connection()
-        self.display = try container.decodeIfPresent(Display.self, forKey: .display) ?? Display()
-        self.layers = try container.decodeIfPresent([String: Layer].self, forKey: .layers) ?? [:]
+        let defaults = Self()
+        self.connection = try container.decodeIfPresent(Connection.self, forKey: .connection) ?? defaults.connection
+        self.display = try container.decodeIfPresent(Display.self, forKey: .display) ?? defaults.display
+        self.layers = try container.decodeIfPresent([String: Layer].self, forKey: .layers) ?? defaults.layers
     }
 }
+
+// Every `init(from:)` below takes its fallbacks from a default-constructed
+// instance, so the memberwise initializer stays the single source of defaults.
 
 extension Config.Connection {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.host = try container.decodeIfPresent(String.self, forKey: .host) ?? "localhost"
-        self.port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 7070
-        self.reconnect_interval_ms = try container.decodeIfPresent(Int.self, forKey: .reconnect_interval_ms) ?? 3000
+        let defaults = Self()
+        self.host = try container.decodeIfPresent(String.self, forKey: .host) ?? defaults.host
+        self.port = try container.decodeIfPresent(Int.self, forKey: .port) ?? defaults.port
+        self.reconnect_interval_ms = try container.decodeIfPresent(Int.self, forKey: .reconnect_interval_ms)
+            ?? defaults.reconnect_interval_ms
     }
 }
 
 extension Config.Layer {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.label = try container.decode(String.self, forKey: .label)
-        self.trigger = try container.decodeIfPresent(String.self, forKey: .trigger) ?? "delay"
-        self.groups = try container.decodeIfPresent([String: Config.Group].self, forKey: .groups) ?? [:]
+        let label = try container.decode(String.self, forKey: .label)
+        let defaults = Self(label: label)
+        self.label = label
+        self.trigger = try container.decodeIfPresent(String.self, forKey: .trigger) ?? defaults.trigger
+        self.groups = try container.decodeIfPresent([String: Config.Group].self, forKey: .groups)
+            ?? defaults.groups
     }
 }
 
 extension Config.Display {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.delay_ms = try container.decodeIfPresent(Int.self, forKey: .delay_ms) ?? 2000
-        self.fade_in_ms = try container.decodeIfPresent(Int.self, forKey: .fade_in_ms) ?? 150
-        self.fade_out_ms = try container.decodeIfPresent(Int.self, forKey: .fade_out_ms) ?? 100
-        self.opacity = try container.decodeIfPresent(Double.self, forKey: .opacity) ?? 0.88
-        self.position = try container.decodeIfPresent(String.self, forKey: .position) ?? "center"
-        self.width_percent = try container.decodeIfPresent(Int.self, forKey: .width_percent) ?? 75
-        self.background_color = try container.decodeIfPresent(String.self, forKey: .background_color) ?? "#11111be0"
-        self.corner_radius = try container.decodeIfPresent(Int.self, forKey: .corner_radius) ?? 16
+        let defaults = Self()
+        self.delay_ms = try container.decodeIfPresent(Int.self, forKey: .delay_ms) ?? defaults.delay_ms
+        self.fade_in_ms = try container.decodeIfPresent(Int.self, forKey: .fade_in_ms) ?? defaults.fade_in_ms
+        self.fade_out_ms = try container.decodeIfPresent(Int.self, forKey: .fade_out_ms) ?? defaults.fade_out_ms
+        self.opacity = try container.decodeIfPresent(Double.self, forKey: .opacity) ?? defaults.opacity
+        self.position = try container.decodeIfPresent(String.self, forKey: .position) ?? defaults.position
+        self.width_percent = try container.decodeIfPresent(Int.self, forKey: .width_percent) ?? defaults.width_percent
+        self.background_color = try container.decodeIfPresent(String.self, forKey: .background_color)
+            ?? defaults.background_color
+        self.corner_radius = try container.decodeIfPresent(Int.self, forKey: .corner_radius) ?? defaults.corner_radius
     }
 }

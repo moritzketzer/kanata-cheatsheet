@@ -30,6 +30,23 @@ struct PomodoroStatus: Codable, Equatable {
         case dissertationSeconds = "dissertation_seconds"
     }
 
+    /// Minutes of dissertation work the Pomodoro day aims for.
+    private static let dailyGoalMinutes = 30
+
+    /// A snapshot older than this is treated as stale and discarded.
+    private static let maxSnapshotAgeSeconds: Double = 5
+
+    /// Fixed locale and calendar so a snapshot date round-trips identically
+    /// regardless of the user's regional settings.
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        return formatter
+    }()
+
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
@@ -41,23 +58,25 @@ struct PomodoroStatus: Codable, Equatable {
         date = try values.decode(String.self, forKey: .date)
         dissertationSeconds = try values.decode(Int.self, forKey: .dissertationSeconds)
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.calendar = Calendar(identifier: .gregorian)
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        dateFormatter.isLenient = false
-        guard schemaVersion == 1,
-              dissertationSeconds >= 0,
-              state == .expired || remainingSeconds >= 0,
-              date.count == 10,
-              let parsedDate = dateFormatter.date(from: date),
-              dateFormatter.string(from: parsedDate) == date
-        else {
+        guard isSelfConsistent else {
             throw DecodingError.dataCorrupted(.init(
                 codingPath: decoder.codingPath,
                 debugDescription: "Invalid Pomodoro status snapshot"
             ))
         }
+    }
+
+    /// A snapshot is only usable when the writer's schema matches, the
+    /// counters are non-negative, and `date` is a real calendar day.
+    private var isSelfConsistent: Bool {
+        guard schemaVersion == 1,
+              dissertationSeconds >= 0,
+              state == .expired || remainingSeconds >= 0,
+              date.count == 10,
+              let parsedDate = Self.dateFormatter.date(from: date),
+              Self.dateFormatter.string(from: parsedDate) == date
+        else { return false }
+        return true
     }
 
     var statusLine: String {
@@ -76,7 +95,7 @@ struct PomodoroStatus: Codable, Equatable {
     }
 
     var progressLine: String {
-        "Heute Dissertation: \(dissertationSeconds / 60) / 30 Minuten"
+        "Heute Dissertation: \(dissertationSeconds / 60) / \(Self.dailyGoalMinutes) Minuten"
     }
 
     private var remainingTime: String {
@@ -105,6 +124,6 @@ struct PomodoroStatus: Codable, Equatable {
               let status = try? JSONDecoder().decode(Self.self, from: data)
         else { return nil }
         let age = now.timeIntervalSince1970 - Double(status.observedAt)
-        return (0...5).contains(age) ? status : nil
+        return (0...maxSnapshotAgeSeconds).contains(age) ? status : nil
     }
 }
