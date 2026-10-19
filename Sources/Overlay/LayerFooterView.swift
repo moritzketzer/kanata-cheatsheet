@@ -32,50 +32,65 @@ private struct LayerFooterSectionView: View {
                 .foregroundStyle(Palette.subtext1)
 
             if section.id == Self.globalActionsSectionId {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 180), spacing: 8)],
-                    alignment: .leading,
-                    spacing: 8
-                ) {
-                    ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(actionTitle(of: row))
-                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(Palette.mauve)
-                            Text(actionDetail(of: row))
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Palette.subtext1)
-                                .lineLimit(2)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Palette.mauve.opacity(0.10))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Palette.mauve.opacity(0.18), lineWidth: 1)
-                        )
-                    }
-                }
+                globalActionsGrid
             } else {
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
-                    GridRow {
-                        ForEach(Array(section.columns.enumerated()), id: \.offset) { _, column in
-                            cell(column, weight: .semibold, color: Palette.mauve)
-                        }
-                    }
-                    ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                        GridRow {
-                            ForEach(Array(row.enumerated()), id: \.offset) { _, value in
-                                cell(value, weight: .regular, color: Palette.overlay0)
-                            }
-                        }
+                tabularGrid
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The global actions read as a flowing set of cards rather than a table,
+    /// because each row is one action's name and its explanation.
+    private var globalActionsGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 180), spacing: 8)],
+            alignment: .leading,
+            spacing: 8
+        ) {
+            ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
+                actionCard(row)
+            }
+        }
+    }
+
+    private func actionCard(_ row: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(actionTitle(of: row))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Palette.mauve)
+            Text(actionDetail(of: row))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(Palette.subtext1)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Palette.mauve.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Palette.mauve.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    /// Every other section is a header row over its data rows.
+    private var tabularGrid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 5) {
+            GridRow {
+                ForEach(Array(section.columns.enumerated()), id: \.offset) { _, column in
+                    cell(column, weight: .semibold, color: Palette.mauve)
+                }
+            }
+            ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, value in
+                        cell(value, weight: .regular, color: Palette.overlay0)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -183,6 +183,14 @@ final class OverlayLogic {
         if trigger == Config.Layer.manualTrigger {
             return handleManualTrigger(layer)
         }
+        return handleAutomaticTrigger(layer)
+    }
+
+    /// An automatically triggered layer normally waits out the reveal delay.
+    /// It skips that wait where the overlay already shows the layer, or shows
+    /// one from the same overlay group, and it inherits a pending layer's
+    /// deadline when both belong to one group.
+    private func handleAutomaticTrigger(_ layer: String) -> OverlayAction {
         if layer == LayerName.yabai, isVisible, visibleLayer == layer {
             pendingLayer = nil
             return .none
@@ -432,15 +440,21 @@ final class OverlayController {
             registry: self.registry,
             storedGeometryProfileId: storedProfileId
         )
-        if self.registry?.views.keyboardLayers?.geometry?.profiles != nil,
-           let normalizedProfileId = logic.selectedGeometryProfileId,
-           normalizedProfileId != storedProfileId
-        {
-            defaults.set(
-                normalizedProfileId,
-                forKey: KeyboardGeometrySelection.defaultsKey
-            )
-        }
+        persistNormalizedProfileSelection(storedProfileId: storedProfileId)
+    }
+
+    /// The selection normalizes a stored profile id the registry no longer
+    /// declares; writing the normalized id back keeps the next launch on the
+    /// profile this one actually shows.
+    private func persistNormalizedProfileSelection(storedProfileId: String?) {
+        guard registry?.views.keyboardLayers?.geometry?.profiles != nil,
+              let normalizedProfileId = logic.selectedGeometryProfileId,
+              normalizedProfileId != storedProfileId
+        else { return }
+        defaults.set(
+            normalizedProfileId,
+            forKey: KeyboardGeometrySelection.defaultsKey
+        )
     }
 
     deinit {
@@ -502,11 +516,7 @@ final class OverlayController {
         }
         switch action {
         case .startDelay:
-            delayTimer?.invalidate()
-            let delay = Double(config.display.delay_ms) / 1000.0
-            delayTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                self?.onDelayExpired()
-            }
+            startDelayTimer()
         case .retargetDelay:
             break
         case .show(let layerName):
@@ -530,6 +540,14 @@ final class OverlayController {
             }
         case .none:
             break
+        }
+    }
+
+    private func startDelayTimer() {
+        delayTimer?.invalidate()
+        let delay = Double(config.display.delay_ms) / 1000.0
+        delayTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            self?.onDelayExpired()
         }
     }
 

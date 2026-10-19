@@ -12,20 +12,7 @@ struct DefyGeometryView: View {
     var body: some View {
         VStack(spacing: metrics.keySize * 0.16) {
             if showInputPath {
-                HStack(spacing: metrics.defyInputPathCaptionSpacing) {
-                    Text("Firmware").foregroundStyle(Palette.subtext0)
-                    Text("→").foregroundStyle(Palette.inputPathArrow)
-                    Text("Kanata Source").foregroundStyle(Palette.text)
-                    Text("→").foregroundStyle(Palette.inputPathArrow)
-                    Text("Mine").foregroundStyle(Palette.text)
-                }
-                .font(.system(
-                    size: metrics.defyInputPathCaptionFontSize,
-                    weight: .semibold
-                ))
-                .padding(.bottom, metrics.defyInputPathCaptionSpacing)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(KeyboardInputPathLabels.caption)
+                inputPathCaption
             }
 
             HStack(alignment: .top, spacing: metrics.defyCenterGap) {
@@ -33,6 +20,25 @@ struct DefyGeometryView: View {
                 half(right, side: .right)
             }
         }
+    }
+
+    /// Names the firmware → source → mine chain each input-path cell spells
+    /// out, once for the whole keyboard.
+    private var inputPathCaption: some View {
+        HStack(spacing: metrics.defyInputPathCaptionSpacing) {
+            Text("Firmware").foregroundStyle(Palette.subtext0)
+            Text("→").foregroundStyle(Palette.inputPathArrow)
+            Text("Kanata Source").foregroundStyle(Palette.text)
+            Text("→").foregroundStyle(Palette.inputPathArrow)
+            Text("Mine").foregroundStyle(Palette.text)
+        }
+        .font(.system(
+            size: metrics.defyInputPathCaptionFontSize,
+            weight: .semibold
+        ))
+        .padding(.bottom, metrics.defyInputPathCaptionSpacing)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(KeyboardInputPathLabels.caption)
     }
 
     /// The measured thumb fan only fits halves whose slots carry the physical
@@ -47,27 +53,36 @@ struct DefyGeometryView: View {
         side: KeyboardHalfSide
     ) -> some View {
         if usesMeasuredFan {
-            let fanGeometry = DefyThumbGeometry(side: side, keySize: metrics.keySize)
-            ZStack(alignment: .topLeading) {
-                mainBody(half, side: side)
-                    .offset(x: side == .left ? 0 : metrics.defyHalfWidth - metrics.defyMainWidth)
-                DefyThumbFan(
-                    thumbs: half.thumbs, fanGeometry: fanGeometry, source: source,
-                    metrics: metrics, showInputPath: showInputPath
-                )
-                .offset(
-                    x: side == .left ? metrics.defyThumbOrigin.x
-                        : metrics.defyHalfWidth - metrics.defyThumbOrigin.x - fanGeometry.size.width,
-                    y: metrics.defyThumbOrigin.y
-                )
-            }
-            .frame(width: metrics.defyHalfWidth, height: metrics.defyHalfHeight, alignment: .topLeading)
+            measuredFanHalf(half, side: side)
         } else {
             VStack(spacing: metrics.keySize * 0.2) {
                 mainBody(half, side: side)
                 thumbCluster(half.thumbs, side: side)
             }
         }
+    }
+
+    /// Both the main body and the measured fan are placed by offset inside one
+    /// half-sized canvas, mirrored for the right half.
+    private func measuredFanHalf(
+        _ half: KeyboardPresentedDefyHalf,
+        side: KeyboardHalfSide
+    ) -> some View {
+        let fanGeometry = DefyThumbGeometry(side: side, keySize: metrics.keySize)
+        return ZStack(alignment: .topLeading) {
+            mainBody(half, side: side)
+                .offset(x: side == .left ? 0 : metrics.defyHalfWidth - metrics.defyMainWidth)
+            DefyThumbFan(
+                thumbs: half.thumbs, fanGeometry: fanGeometry, source: source,
+                metrics: metrics, showInputPath: showInputPath
+            )
+            .offset(
+                x: side == .left ? metrics.defyThumbOrigin.x
+                    : metrics.defyHalfWidth - metrics.defyThumbOrigin.x - fanGeometry.size.width,
+                y: metrics.defyThumbOrigin.y
+            )
+        }
+        .frame(width: metrics.defyHalfWidth, height: metrics.defyHalfHeight, alignment: .topLeading)
     }
 
     private func mainBody(

@@ -10,22 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.info("kanata-cheatsheet starting")
 
-        let configPath = Config.defaultConfigPath()
-        let config: Config
-        do {
-            config = try Config.load(from: configPath)
-            Log.info("Loaded config from \(configPath)")
-        } catch {
-            Log.error("Failed to load config from \(configPath): \(error). Using defaults.")
-            config = Config()
-        }
-
-        let registryResult: Result<KeybindingRegistry, Error> = Result {
-            try KeybindingRegistry.load()
-        }
-        if case .failure(let error) = registryResult {
-            Log.error("Failed to load keybinding registry: \(error)")
-        }
+        let config = loadedConfig()
+        let registryResult = loadedRegistry()
         overlayController = OverlayController(config: config, registryResult: registryResult)
         browserController = RegistryBrowserController(registryResult: registryResult)
 
@@ -39,6 +25,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tcpClient = client
 
         Log.info("kanata-cheatsheet ready — connecting to \(config.connection.host):\(config.connection.port)")
+    }
+
+    /// The config file at the default path, falling back to the built-in
+    /// defaults so a missing or broken file still leaves a usable app.
+    private func loadedConfig() -> Config {
+        let configPath = Config.defaultConfigPath()
+        do {
+            let config = try Config.load(from: configPath)
+            Log.info("Loaded config from \(configPath)")
+            return config
+        } catch {
+            Log.error("Failed to load config from \(configPath): \(error). Using defaults.")
+            return Config()
+        }
+    }
+
+    /// The registry load outcome. A failure is logged here and handed on, so
+    /// the browser can show it rather than open empty.
+    private func loadedRegistry() -> Result<KeybindingRegistry, Error> {
+        let registryResult: Result<KeybindingRegistry, Error> = Result {
+            try KeybindingRegistry.load()
+        }
+        if case .failure(let error) = registryResult {
+            Log.error("Failed to load keybinding registry: \(error)")
+        }
+        return registryResult
     }
 }
 

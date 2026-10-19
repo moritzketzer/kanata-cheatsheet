@@ -691,25 +691,33 @@ enum KeyboardLayerProjector {
             label: legacyLayer.label,
             trigger: legacyLayer.trigger,
             source: .legacy,
-            rows: legacyRows.map { row in
-                row.map { key in
-                    let binding = bindingsByKeyLabel[key.label]
-                    return KeyboardPresentedKey(
-                        id: key.id,
-                        width: key.width,
-                        badge: key.label,
-                        actionLabel: binding?.label,
-                        freeLabel: nil,
-                        colorHex: binding?.color,
-                        primary: nil,
-                        holdModifier: nil,
-                        explanation: binding?.label
-                    )
-                }
-            },
+            rows: legacyPresentedRows(bindingsByKeyLabel: bindingsByKeyLabel),
             groups: legacyLayer.groups.map {
                 KeyboardPresentedGroup(id: $0.key, colorHex: $0.value.color)
             }.sorted { $0.id < $1.id }
         )
+    }
+
+    /// Projects the fixed legacy rows, taking each key's action label and
+    /// colour from whichever legacy group binds that key's label.
+    private static func legacyPresentedRows(
+        bindingsByKeyLabel: [String: (label: String, color: String)]
+    ) -> [[KeyboardPresentedKey]] {
+        legacyRows.map { row in
+            row.map { key in
+                let binding = bindingsByKeyLabel[key.label]
+                return KeyboardPresentedKey(
+                    id: key.id,
+                    width: key.width,
+                    badge: key.label,
+                    actionLabel: binding?.label,
+                    freeLabel: nil,
+                    colorHex: binding?.color,
+                    primary: nil,
+                    holdModifier: nil,
+                    explanation: binding?.label
+                )
+            }
+        }
     }
 }

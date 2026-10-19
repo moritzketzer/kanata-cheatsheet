@@ -119,27 +119,35 @@ final class KanataTCPClient {
         self.connection = conn
 
         conn.stateUpdateHandler = { [weak self] state in
-            // Identity guard: a superseded connection must not cancel or
-            // reschedule over the current one.
-            guard let self, self.connection === conn else { return }
-            switch KanataTCPClient.action(for: state) {
-            case .connected:
-                Log.info("Connected to kanata TCP at \(self.host):\(self.port)")
-                DispatchQueue.main.async { self.delegate?.didConnect() }
-                self.receive(on: conn)
-            case .retry:
-                Log.error("TCP connection unavailable (\(state)); will retry")
-                conn.cancel()
-                DispatchQueue.main.async {
-                    self.delegate?.didDisconnect()
-                    self.scheduleReconnect()
-                }
-            case .ignore:
-                break
-            }
+            self?.handleConnectionState(state, of: conn)
         }
 
         conn.start(queue: queue)
+    }
+
+    /// Runs on `queue`, the connection's own queue. The identity guard is what
+    /// keeps a superseded connection from cancelling or rescheduling over the
+    /// current one.
+    private func handleConnectionState(
+        _ state: NWConnection.State,
+        of conn: NWConnection
+    ) {
+        guard connection === conn else { return }
+        switch KanataTCPClient.action(for: state) {
+        case .connected:
+            Log.info("Connected to kanata TCP at \(host):\(port)")
+            DispatchQueue.main.async { self.delegate?.didConnect() }
+            receive(on: conn)
+        case .retry:
+            Log.error("TCP connection unavailable (\(state)); will retry")
+            conn.cancel()
+            DispatchQueue.main.async {
+                self.delegate?.didDisconnect()
+                self.scheduleReconnect()
+            }
+        case .ignore:
+            break
+        }
     }
 
     private func receive(on conn: NWConnection) {

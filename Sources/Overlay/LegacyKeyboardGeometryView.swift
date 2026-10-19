@@ -36,26 +36,34 @@ struct LegacyKeyboardGeometryView: View {
             }
 
             if let thumbs {
-                VStack(spacing: 6) {
-                    Text(thumbs.label)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Palette.overlay0)
-                        .tracking(2)
-                        .textCase(.uppercase)
+                thumbCluster(thumbs)
+            }
+        }
+    }
 
-                    HStack(alignment: .bottom, spacing: metrics.keySize * 1.25) {
-                        legacyThumbHalf(
-                            top: thumbs.leftTop,
-                            bottom: thumbs.leftBottom,
-                            topOffset: metrics.legacyThumbTopOffset
-                        )
-                        legacyThumbHalf(
-                            top: thumbs.rightTop,
-                            bottom: thumbs.rightBottom,
-                            topOffset: -metrics.legacyThumbTopOffset
-                        )
-                    }
-                }
+    /// The labelled thumb block under the rows: the two halves fan apart, so
+    /// each one takes the top row's offset in its own direction.
+    private func thumbCluster(
+        _ thumbs: KeyboardPresentedDefyThumbs
+    ) -> some View {
+        VStack(spacing: 6) {
+            Text(thumbs.label)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Palette.overlay0)
+                .tracking(2)
+                .textCase(.uppercase)
+
+            HStack(alignment: .bottom, spacing: metrics.keySize * 1.25) {
+                legacyThumbHalf(
+                    top: thumbs.leftTop,
+                    bottom: thumbs.leftBottom,
+                    topOffset: metrics.legacyThumbTopOffset
+                )
+                legacyThumbHalf(
+                    top: thumbs.rightTop,
+                    bottom: thumbs.rightBottom,
+                    topOffset: -metrics.legacyThumbTopOffset
+                )
             }
         }
     }

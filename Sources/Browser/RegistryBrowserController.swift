@@ -52,26 +52,30 @@ final class RegistryBrowserController: NSObject, NSWindowDelegate {
     func open() {
         switch logic.open() {
         case .create:
-            let content = RegistryBrowserView(registryResult: registryResult)
-            let hostView = NSHostingView(rootView: content)
-            let window = NSWindow(
-                contentRect: Self.defaultContentRect,
-                styleMask: [.titled, .closable, .resizable, .miniaturizable],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = "Keybinding Registry"
-            window.minSize = Self.minimumContentSize
-            window.contentView = hostView
-            window.isReleasedWhenClosed = false
-            window.delegate = self
-            window.center()
-            self.window = window
+            window = makeBrowserWindow()
         case .raiseExisting:
             break
         }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func makeBrowserWindow() -> NSWindow {
+        let content = RegistryBrowserView(registryResult: registryResult)
+        let hostView = NSHostingView(rootView: content)
+        let window = NSWindow(
+            contentRect: Self.defaultContentRect,
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Keybinding Registry"
+        window.minSize = Self.minimumContentSize
+        window.contentView = hostView
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.center()
+        return window
     }
 
     func windowWillClose(_ notification: Notification) {

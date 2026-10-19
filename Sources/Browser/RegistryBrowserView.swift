@@ -55,17 +55,7 @@ struct RegistryBrowserView: View {
     private func browser(_ registry: KeybindingRegistry) -> some View {
         let bindings = filteredBindings(registry)
         return VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(sidebarTitle)
-                        .font(.title2.weight(.semibold))
-                    Text("\(bindings.count) bindings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(16)
+            browserHeader(bindingCount: bindings.count)
 
             Divider()
 
@@ -86,6 +76,22 @@ struct RegistryBrowserView: View {
         )
     }
 
+    /// The browser's own title bar: which view is selected, and how many
+    /// bindings it currently lists.
+    private func browserHeader(bindingCount: Int) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(sidebarTitle)
+                    .font(.title2.weight(.semibold))
+                Text("\(bindingCount) bindings")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(16)
+    }
+
     private func bindingList(
         _ registry: KeybindingRegistry,
         bindings: [RegistryBinding]
@@ -97,19 +103,25 @@ struct RegistryBrowserView: View {
             }
             .frame(minWidth: 420)
 
-            Group {
-                if let selectedBindingID, let binding = registry.binding(withID: selectedBindingID) {
-                    RegistryBindingInspector(binding: binding, registry: registry)
-                } else {
-                    ContentUnavailableView(
-                        "Select a Binding",
-                        systemImage: "keyboard",
-                        description: Text("Source, context, ownership, and diagnostics appear here.")
-                    )
-                }
-            }
-            .frame(minWidth: 300, idealWidth: 360)
+            inspectorPane(registry)
         }
+    }
+
+    /// The inspector for the selected binding, or the placeholder that says
+    /// what will appear there once one is selected.
+    private func inspectorPane(_ registry: KeybindingRegistry) -> some View {
+        Group {
+            if let selectedBindingID, let binding = registry.binding(withID: selectedBindingID) {
+                RegistryBindingInspector(binding: binding, registry: registry)
+            } else {
+                ContentUnavailableView(
+                    "Select a Binding",
+                    systemImage: "keyboard",
+                    description: Text("Source, context, ownership, and diagnostics appear here.")
+                )
+            }
+        }
+        .frame(minWidth: 300, idealWidth: 360)
     }
 
     private func filteredBindings(_ registry: KeybindingRegistry) -> [RegistryBinding] {
@@ -192,19 +204,7 @@ private struct RegistryBindingInspector: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(binding.gesture.display)
-                        .font(.system(size: 28, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Palette.mauve)
-                    Text(binding.action.label)
-                        .font(.title3.weight(.semibold))
-                    if let detail = binding.action.detail {
-                        Text(detail)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
+                header
 
                 inspectorSection("Context") {
                     InspectorValue(label: "Stage", value: binding.context.stage)
@@ -257,6 +257,24 @@ private struct RegistryBindingInspector: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Gesture, action, and the action's own detail line, which the registry
+    /// only fills in for some bindings.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(binding.gesture.display)
+                .font(.system(size: 28, weight: .bold, design: .monospaced))
+                .foregroundStyle(Palette.mauve)
+            Text(binding.action.label)
+                .font(.title3.weight(.semibold))
+            if let detail = binding.action.detail {
+                Text(detail)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         }
     }
 
@@ -343,25 +361,30 @@ private struct ModifierSpaceSlotCard: View {
                     .foregroundStyle(.tertiary)
             } else {
                 ForEach(bindings) { binding in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(binding.action.label)
-                        Text(binding.contextSummary(includingLayer: false))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .opacity(
-                        ModifierSpaceDimming.isDimmed(
-                            bindingID: binding.id,
-                            search: search,
-                            matchingBindingIDs: matchingBindingIDs
-                        ) ? 0.28 : 1
-                    )
+                    bindingEntry(for: binding)
                 }
             }
         }
         .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
         .padding(14)
         .background(.quaternary.opacity(slot.isUnrecorded ? 0.35 : 0.7), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// One binding on the card, dimmed while the active search excludes it.
+    private func bindingEntry(for binding: RegistryBinding) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(binding.action.label)
+            Text(binding.contextSummary(includingLayer: false))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .opacity(
+            ModifierSpaceDimming.isDimmed(
+                bindingID: binding.id,
+                search: search,
+                matchingBindingIDs: matchingBindingIDs
+            ) ? 0.28 : 1
+        )
     }
 }
 

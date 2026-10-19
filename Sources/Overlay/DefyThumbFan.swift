@@ -23,47 +23,71 @@ struct DefyThumbFan: View {
 
     @ViewBuilder
     private func thumb(_ geometry: DefyThumbKeyGeometry, slot: KeyboardPresentedDefySlot) -> some View {
-        let rect = geometry.content
         switch DefySlotRenderKind(slot: slot, showInputPath: showInputPath) {
         case .key(let key):
-            let cell = KeyCell(
-                key: key, source: source,
-                width: metrics.defyFanThumbWidth, height: metrics.defyFanThumbHeight,
-                physicalId: geometry.id, showsShell: false, uniformThumbLayout: true
-            )
-            thumbShell(
-                geometry, fill: cell.fillColor, stroke: cell.strokeColor,
-                center: geometry.areaCenter
-            ) {
-                cell.accessibilityElement(children: .combine)
-            }
+            keyThumb(geometry, key: key)
         case .inputPath(let slot):
-            let cell = KeyboardInputPathCell(
-                slot: slot,
-                width: metrics.defyFanInputPathSize, height: metrics.defyFanInputPathSize,
-                isThumb: true, referenceKeySize: metrics.keySize
-            )
-            thumbShell(
-                geometry, fill: cell.fillColor, stroke: cell.strokeColor,
-                center: geometry.areaCenter
-            ) {
-                cell.content
-            }
+            inputPathThumb(geometry, slot: slot)
         case .quiet(let label):
-            let labelHeight = max(8, metrics.keySize * 0.13)
-            let cell = QuietKeyShell(label: label, width: rect.width, height: rect.height - labelHeight)
-            thumbShell(
-                geometry, fill: cell.fillColor, stroke: cell.strokeColor,
-                center: CGPoint(x: rect.midX, y: rect.midY)
-            ) {
-                VStack(spacing: 0) {
-                    physicalLabel(geometry.id, height: labelHeight)
-                    cell.content
-                }
-                .frame(width: rect.width, height: rect.height)
-            }
+            quietThumb(geometry, label: label)
         case .vacancy:
             EmptyView()
+        }
+    }
+
+    private func keyThumb(
+        _ geometry: DefyThumbKeyGeometry,
+        key: KeyboardPresentedKey
+    ) -> some View {
+        let cell = KeyCell(
+            key: key, source: source,
+            width: metrics.defyFanThumbWidth, height: metrics.defyFanThumbHeight,
+            physicalId: geometry.id, showsShell: false, uniformThumbLayout: true
+        )
+        return thumbShell(
+            geometry, fill: cell.fillColor, stroke: cell.strokeColor,
+            center: geometry.areaCenter
+        ) {
+            cell.accessibilityElement(children: .combine)
+        }
+    }
+
+    private func inputPathThumb(
+        _ geometry: DefyThumbKeyGeometry,
+        slot: KeyboardPresentedDefySlot
+    ) -> some View {
+        let cell = KeyboardInputPathCell(
+            slot: slot,
+            width: metrics.defyFanInputPathSize, height: metrics.defyFanInputPathSize,
+            isThumb: true, referenceKeySize: metrics.keySize
+        )
+        return thumbShell(
+            geometry, fill: cell.fillColor, stroke: cell.strokeColor,
+            center: geometry.areaCenter
+        ) {
+            cell.content
+        }
+    }
+
+    /// A quiet thumb names its physical key above the shell, so it is the only
+    /// kind that fills the measured outline itself instead of being centered
+    /// on the key's area.
+    private func quietThumb(
+        _ geometry: DefyThumbKeyGeometry,
+        label: String
+    ) -> some View {
+        let rect = geometry.content
+        let labelHeight = max(8, metrics.keySize * 0.13)
+        let cell = QuietKeyShell(label: label, width: rect.width, height: rect.height - labelHeight)
+        return thumbShell(
+            geometry, fill: cell.fillColor, stroke: cell.strokeColor,
+            center: CGPoint(x: rect.midX, y: rect.midY)
+        ) {
+            VStack(spacing: 0) {
+                physicalLabel(geometry.id, height: labelHeight)
+                cell.content
+            }
+            .frame(width: rect.width, height: rect.height)
         }
     }
 
