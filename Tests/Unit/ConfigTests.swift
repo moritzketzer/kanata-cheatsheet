@@ -63,6 +63,25 @@ struct ConfigTests {
         #expect(config.connection.port == 9999)
     }
 
+    @Test("ports outside 1...65535 fall back to the default",
+          arguments: [99999, -1, 0])
+    func rejectsOutOfRangePort(port: Int) throws {
+        let json = """
+        { "connection": { "port": \(port) }, "layers": {} }
+        """
+        let config = try Config.parse(from: json.data(using: .utf8)!)
+        #expect(config.connection.port == 7070)
+    }
+
+    @Test("a valid custom port survives decoding")
+    func keepsValidCustomPort() throws {
+        let json = """
+        { "connection": { "port": 8080 }, "layers": {} }
+        """
+        let config = try Config.parse(from: json.data(using: .utf8)!)
+        #expect(config.connection.port == 8080)
+    }
+
     @Test("empty JSON uses all defaults")
     func emptyJson() throws {
         let json = "{}"

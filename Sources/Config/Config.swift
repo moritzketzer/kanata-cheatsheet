@@ -98,11 +98,16 @@ struct Config: Codable {
 // instance, so the memberwise initializer stays the single source of defaults.
 
 extension Config.Connection {
+    /// A port outside this range cannot reach `NWEndpoint.Port`, so a bad
+    /// config value falls back to the default instead of trapping at startup.
+    static let validPortRange = 1...65535
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = Self()
         self.host = try container.decodeIfPresent(String.self, forKey: .host) ?? defaults.host
-        self.port = try container.decodeIfPresent(Int.self, forKey: .port) ?? defaults.port
+        let decodedPort = try container.decodeIfPresent(Int.self, forKey: .port) ?? defaults.port
+        self.port = Self.validPortRange.contains(decodedPort) ? decodedPort : defaults.port
         self.reconnect_interval_ms = try container.decodeIfPresent(Int.self, forKey: .reconnect_interval_ms)
             ?? defaults.reconnect_interval_ms
     }
