@@ -9,9 +9,7 @@ struct OverlayControllerTests {
     @MainActor
     func pomodoroRefreshPreservesPanel() throws {
         var reads = 0
-        var status = try JSONDecoder().decode(
-            PomodoroStatus.self, from: Data(pomodoroFixture().utf8)
-        )
+        var status = try decodedPomodoroStatus()
         let controller = OverlayController(
             config: pomodoroConfig,
             registryResult: .failure(NSError(domain: "Test", code: 1)),
@@ -24,10 +22,7 @@ struct OverlayControllerTests {
         controller.handleMessage("cheatsheet-show")
         defer { controller.handleMessage("cheatsheet-hide") }
 
-        let panel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let (panel, host) = try panelAndHost()
         let keyWindow = NSApplication.shared.keyWindow
         #expect(reads == 1)
         #expect(host.rootView.pomodoroStatus == status)
@@ -37,15 +32,12 @@ struct OverlayControllerTests {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
         let frame = panel.frame
 
-        status = try JSONDecoder().decode(
-            PomodoroStatus.self,
-            from: Data(pomodoroFixture(state: "running", remaining: 221).utf8)
-        )
+        status = try decodedPomodoroStatus(state: "running", remaining: 221)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 1.1))
 
         #expect(reads == 2)
         #expect(host.rootView.pomodoroStatus == status)
-        #expect(panel === NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
+        #expect(panel === overlayPanels().last)
         #expect(panel.contentView === host)
         #expect(panel.frame == frame)
         #expect(NSApplication.shared.keyWindow === keyWindow)
@@ -56,9 +48,7 @@ struct OverlayControllerTests {
     @MainActor
     func pomodoroStopsReading(replace: Bool) throws {
         var reads = 0
-        let status = try JSONDecoder().decode(
-            PomodoroStatus.self, from: Data(pomodoroFixture().utf8)
-        )
+        let status = try decodedPomodoroStatus()
         let controller = OverlayController(
             config: pomodoroConfig,
             registryResult: .failure(NSError(domain: "Test", code: 1)),
@@ -98,9 +88,7 @@ struct OverlayControllerTests {
         )
         weak let weakController = controller
         controller?.handleMessage("cheatsheet-show:pomodoro")
-        let panel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let panel = try currentPanel()
         defer { panel.orderOut(nil) }
         #expect(reads == 1)
         controller = nil
@@ -113,9 +101,7 @@ struct OverlayControllerTests {
     @Test("missing Pomodoro data replaces previously displayed progress")
     @MainActor
     func pomodoroUnavailableReplacesProgress() throws {
-        var status: PomodoroStatus? = try JSONDecoder().decode(
-            PomodoroStatus.self, from: Data(pomodoroFixture().utf8)
-        )
+        var status: PomodoroStatus? = try decodedPomodoroStatus()
         let controller = OverlayController(
             config: pomodoroConfig,
             registryResult: .failure(NSError(domain: "Test", code: 1)),
@@ -124,10 +110,7 @@ struct OverlayControllerTests {
         )
         controller.handleMessage("cheatsheet-show:pomodoro")
         defer { controller.handleMessage("cheatsheet-hide") }
-        let panel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let (panel, host) = try panelAndHost()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
         let frame = panel.frame
         status = nil
@@ -144,13 +127,13 @@ struct OverlayControllerTests {
     @MainActor
     func pomodoroHeaderKeepsFittingSize(profile: String) throws {
         let statuses: [PomodoroStatus?] = try [
-            pomodoroFixture(state: "idle", remaining: 1500),
-            pomodoroFixture(state: "running"),
-            pomodoroFixture(),
-            pomodoroFixture(state: "running", mode: "break"),
-            pomodoroFixture(state: "expired", remaining: -1),
-            pomodoroFixture(progress: 2461),
-        ].map { try JSONDecoder().decode(PomodoroStatus.self, from: Data($0.utf8)) } + [nil]
+            decodedPomodoroStatus(state: "idle", remaining: 1500),
+            decodedPomodoroStatus(state: "running"),
+            decodedPomodoroStatus(),
+            decodedPomodoroStatus(state: "running", mode: "break"),
+            decodedPomodoroStatus(state: "expired", remaining: -1),
+            decodedPomodoroStatus(progress: 2461),
+        ] + [nil]
         let sizes = statuses.map { status in
             NSHostingView(rootView: KeyboardView(
                 layerName: "pomodoro",
@@ -165,13 +148,10 @@ struct OverlayControllerTests {
     }
 
     private var pomodoroConfig: Config {
-        Config(
-            display: Config.Display(delay_ms: 0, fade_in_ms: 0, fade_out_ms: 0, width_percent: 75),
-            layers: [
-                "pomodoro": Config.Layer(label: "Pomodoro", trigger: "manual", groups: [:]),
-                "yabai": Config.Layer(label: "Yabai", trigger: "manual", groups: [:]),
-            ]
-        )
+        immediateConfig(layers: [
+            "pomodoro": Config.Layer(label: "Pomodoro", trigger: "manual", groups: [:]),
+            "yabai": Config.Layer(label: "Yabai", trigger: "manual", groups: [:]),
+        ])
     }
 
     private var appsConfig: Config {
@@ -287,27 +267,8 @@ struct OverlayControllerTests {
     @Test("controller samples Yabai before its first visible frame")
     @MainActor
     func controllerSamplesBeforeShowingYabai() throws {
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
-        let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
-            registryResult: .success(yabaiRegistry()),
-            modifierFlags: { 0x20 },
-            presentsPanels: false
-        )
+        let (controller, _, host, _) = try shownYabaiController(flags: { 0x20 })
 
-        controller.handleConnectionChange(true)
-        controller.handleLayerChange("yabai")
-        controller.handleMessage("cheatsheet-show")
-
-        let panel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
         #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .option)
         #expect(controller.isModifierTimerRunning)
 
@@ -318,31 +279,14 @@ struct OverlayControllerTests {
     @MainActor
     func modifierRefreshReusesPanelGeometry() throws {
         var flags: UInt = 0
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
+        let (controller, panel, host, frame) = try shownYabaiController(
+            flags: { flags }
         )
-        let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
-            registryResult: .success(yabaiRegistry()),
-            modifierFlags: { flags },
-            presentsPanels: false
-        )
-        controller.handleConnectionChange(true)
-        controller.handleLayerChange("yabai")
-        controller.handleMessage("cheatsheet-show")
-        let panel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
-        let frame = panel.frame
 
         flags = 0x8
         controller.sampleModifierFlags()
 
-        #expect(panel === NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
+        #expect(panel === overlayPanels().last)
         #expect(panel.contentView === host)
         #expect(panel.frame == frame)
         #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .command)
@@ -357,24 +301,15 @@ struct OverlayControllerTests {
     @MainActor
     func previewToLiveSamplesBeforeRefresh() throws {
         let flags: UInt = 0x20
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
         let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
+            config: immediateConfig(),
             registryResult: .success(yabaiRegistry()),
             modifierFlags: { flags },
             presentsPanels: false
         )
         controller.handleConnectionChange(true)
         controller.handleMessage("cheatsheet-show:yabai")
-        let panel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let (panel, host) = try panelAndHost()
         let frame = panel.frame
         #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == nil)
         #expect(host.rootView.yabaiQualifier == "Preview")
@@ -394,26 +329,9 @@ struct OverlayControllerTests {
     @MainActor
     func reconnectSamplesBeforeFreshLayerRefresh() throws {
         var flags: UInt = 0
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
+        let (controller, panel, host, frame) = try shownYabaiController(
+            flags: { flags }
         )
-        let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
-            registryResult: .success(yabaiRegistry()),
-            modifierFlags: { flags },
-            presentsPanels: false
-        )
-        controller.handleConnectionChange(true)
-        controller.handleLayerChange("yabai")
-        controller.handleMessage("cheatsheet-show")
-        let panel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
-        let frame = panel.frame
 
         controller.handleConnectionChange(false)
         controller.handleConnectionChange(true)
@@ -431,14 +349,8 @@ struct OverlayControllerTests {
     @Test("delayed layer exit immediately reconciles visible Yabai")
     @MainActor
     func delayedLayerExitImmediatelyReconcilesVisibleYabai() throws {
-        let display = Config.Display(
-            delay_ms: 30,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
         let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
+            config: immediateConfig(delay_ms: 30),
             registryResult: .success(yabaiRegistry(
                 trigger: "delay",
                 includeApps: true
@@ -450,12 +362,7 @@ struct OverlayControllerTests {
         controller.handleLayerChange("yabai")
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
 
-        let panel = try #require(
-            NSApplication.shared.windows
-                .compactMap { $0 as? OverlayPanel }
-                .last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let (panel, host) = try panelAndHost()
         let frame = panel.frame
         #expect(host.rootView.presentation.key(at: "KeyU")?.actionModifier == .option)
         #expect(host.rootView.yabaiQualifier == nil)
@@ -470,14 +377,7 @@ struct OverlayControllerTests {
         #expect(!controller.isModifierTimerRunning)
 
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
-        let replacement = try #require(
-            NSApplication.shared.windows
-                .compactMap { $0 as? OverlayPanel }
-                .last
-        )
-        let replacementHost = try #require(
-            replacement.contentView as? NSHostingView<KeyboardView>
-        )
+        let (_, replacementHost) = try panelAndHost()
         #expect(replacementHost.rootView.presentation.name == "apps")
 
         controller.handleMessage("cheatsheet-hide")
@@ -487,14 +387,8 @@ struct OverlayControllerTests {
     @MainActor
     func freshDelayedYabaiNotificationSamplesWithoutDuplicateShow() throws {
         var flags: UInt = 0
-        let display = Config.Display(
-            delay_ms: 30,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
         let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
+            config: immediateConfig(delay_ms: 30),
             registryResult: .success(yabaiRegistry(trigger: "delay")),
             modifierFlags: { flags },
             presentsPanels: false
@@ -503,12 +397,7 @@ struct OverlayControllerTests {
         controller.handleLayerChange("yabai")
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
 
-        let panel = try #require(
-            NSApplication.shared.windows
-                .compactMap { $0 as? OverlayPanel }
-                .last
-        )
-        let host = try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        let (panel, host) = try panelAndHost()
         let frame = panel.frame
 
         controller.handleConnectionChange(false)
@@ -523,11 +412,7 @@ struct OverlayControllerTests {
         #expect(controller.isModifierTimerRunning)
 
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
-        let stillVisible = try #require(
-            NSApplication.shared.windows
-                .compactMap { $0 as? OverlayPanel }
-                .last
-        )
+        let stillVisible = try currentPanel()
         #expect(stillVisible === panel)
         #expect(stillVisible.contentView === host)
         #expect(stillVisible.frame == frame)
@@ -1130,15 +1015,7 @@ struct OverlayControllerTests {
             let defaults = try #require(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }
             let controller = OverlayController(
-                config: Config(
-                    display: Config.Display(
-                        delay_ms: 30,
-                        fade_in_ms: 0,
-                        fade_out_ms: 0,
-                        width_percent: 75
-                    ),
-                    layers: [:]
-                ),
+                config: immediateConfig(delay_ms: 30),
                 registryResult: .success(geometryProfileRegistry(trigger: "delay")),
                 defaults: defaults,
                 presentsPanels: false
@@ -1205,29 +1082,19 @@ struct OverlayControllerTests {
         let suite = "KeyboardGeometryLayoutTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
         let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
+            config: immediateConfig(),
             registryResult: .success(geometryProfileRegistry()),
             defaults: defaults,
             presentsPanels: false
         )
 
         controller.handleMessage("cheatsheet-show:apps")
-        let macbookPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let macbookPanel = try currentPanel()
         let macbookFrame = macbookPanel.frame
 
         controller.handleMessage("cheatsheet-geometry-toggle")
-        let defyPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let defyPanel = try currentPanel()
 
         #expect(defyPanel === macbookPanel)
         #expect(defyPanel.frame.height > macbookFrame.height)
@@ -1243,14 +1110,8 @@ struct OverlayControllerTests {
         let suite = "InputPathPanelTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
         let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
+            config: immediateConfig(),
             registryResult: .success(geometryProfileRegistry()),
             defaults: defaults,
             presentsPanels: false
@@ -1258,15 +1119,11 @@ struct OverlayControllerTests {
 
         controller.handleMessage("cheatsheet-geometry-select:defy")
         controller.handleMessage("cheatsheet-pin-toggle:mine")
-        let ordinaryPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let ordinaryPanel = try currentPanel()
         let ordinaryFrame = ordinaryPanel.frame
 
         controller.handleMessage("cheatsheet-input-path-toggle")
-        let inputPathPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let inputPathPanel = try currentPanel()
 
         #expect(inputPathPanel === ordinaryPanel)
         #expect(inputPathPanel.frame.height > ordinaryFrame.height)
@@ -1282,14 +1139,7 @@ struct OverlayControllerTests {
     @Test("toggling free modifier-space slots resizes the overlay both ways")
     @MainActor
     func togglingFreeSlotsResizesOverlayBothWays() throws {
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
-        let config = Config(
-            display: display,
+        let config = immediateConfig(
             layers: ["apps": Config.Layer(label: "APPS", groups: [:])]
         )
         let registry = modifierSpaceRegistry(occupiedCount: 6)
@@ -1300,7 +1150,7 @@ struct OverlayControllerTests {
         )
 
         controller.handleMessage("cheatsheet-show:apps")
-        let panel = try #require(NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last)
+        let panel = try currentPanel()
         let occupiedFrame = panel.frame
 
         controller.handleMessage("cheatsheet-space-toggle-free")
@@ -1327,29 +1177,19 @@ struct OverlayControllerTests {
     @Test("visible grouped layers reuse the same panel")
     @MainActor
     func visibleGroupedLayersReusePanel() throws {
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
         let registry = modifierSpaceRegistry(occupiedCount: 6)
         let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
+            config: immediateConfig(),
             registryResult: .success(registry),
             presentsPanels: false
         )
 
         controller.handleMessage("cheatsheet-show:apps")
-        let originalPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let originalPanel = try currentPanel()
         let originalAlpha = originalPanel.alphaValue
 
         controller.handleLayerChange("apps-alt")
-        let switchedPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let switchedPanel = try currentPanel()
 
         #expect(switchedPanel === originalPanel)
         #expect(switchedPanel.alphaValue == originalAlpha)
@@ -1362,16 +1202,10 @@ struct OverlayControllerTests {
     @Test("grouped layer change keeps the original delay deadline")
     @MainActor
     func groupedLayerChangeKeepsDelayDeadline() throws {
-        let display = Config.Display(
-            delay_ms: 300,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
         let registry = modifierSpaceRegistry(occupiedCount: 6)
         let earlierPanels = overlayPanels()
         let controller = OverlayController(
-            config: Config(display: display, layers: [:]),
+            config: immediateConfig(delay_ms: 300),
             registryResult: .success(registry),
             presentsPanels: false
         )
@@ -1389,12 +1223,7 @@ struct OverlayControllerTests {
     @Test("pinned Mine and Fn render Defy rows in one fitted panel")
     @MainActor
     func pinnedMineFnCycleRendersDefyRows() throws {
-        let display = Config.Display(
-            delay_ms: 0,
-            fade_in_ms: 0,
-            fade_out_ms: 0,
-            width_percent: 75
-        )
+        let display = immediateDisplay()
         let baseView = NSHostingView(rootView: KeyboardView(
             layerName: "mine",
             legacyLayer: nil,
@@ -1416,20 +1245,14 @@ struct OverlayControllerTests {
         )
 
         controller.handleMessage("cheatsheet-pin-toggle:mine")
-        let minePanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let minePanel = try currentPanel()
         controller.handleLayerChange("fn")
-        let fnPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let fnPanel = try currentPanel()
         #expect(fnPanel === minePanel)
         #expect(try #require(fnPanel.contentView).fittingSize.height <= fnPanel.frame.height)
 
         controller.handleLayerChange("mine")
-        let restoredPanel = try #require(
-            NSApplication.shared.windows.compactMap { $0 as? OverlayPanel }.last
-        )
+        let restoredPanel = try currentPanel()
         #expect(restoredPanel === minePanel)
         #expect(try #require(restoredPanel.contentView).fittingSize.height <= restoredPanel.frame.height)
 
@@ -1482,6 +1305,124 @@ struct OverlayControllerTests {
         return overlayPanels().last { !known.contains(ObjectIdentifier($0)) }
     }
 
+    /// The overlay panel the controller under test built most recently.
+    @MainActor
+    private func currentPanel() throws -> OverlayPanel {
+        try #require(overlayPanels().last)
+    }
+
+    @MainActor
+    private func panelAndHost() throws -> (OverlayPanel, NSHostingView<KeyboardView>) {
+        let panel = try currentPanel()
+        return (
+            panel,
+            try #require(panel.contentView as? NSHostingView<KeyboardView>)
+        )
+    }
+
+    /// Fade-free display geometry: panel tests read frames right after a show
+    /// instead of waiting for an animation to settle.
+    private func immediateDisplay(delay_ms: Int = 0) -> Config.Display {
+        Config.Display(
+            delay_ms: delay_ms,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+            width_percent: 75
+        )
+    }
+
+    private func immediateConfig(
+        delay_ms: Int = 0,
+        layers: [String: Config.Layer] = [:]
+    ) -> Config {
+        Config(display: immediateDisplay(delay_ms: delay_ms), layers: layers)
+    }
+
+    /// A headless controller whose live Yabai layer is already on a panel,
+    /// together with that panel, its host, and the frame it settled on.
+    @MainActor
+    private func shownYabaiController(
+        flags: @escaping () -> UInt
+    ) throws -> (OverlayController, OverlayPanel, NSHostingView<KeyboardView>, NSRect) {
+        let controller = OverlayController(
+            config: immediateConfig(),
+            registryResult: .success(yabaiRegistry()),
+            modifierFlags: flags,
+            presentsPanels: false
+        )
+        controller.handleConnectionChange(true)
+        controller.handleLayerChange("yabai")
+        controller.handleMessage("cheatsheet-show")
+        let (panel, host) = try panelAndHost()
+        return (controller, panel, host, panel.frame)
+    }
+
+    /// The schema-two shell every fixture below shares; only the geometry,
+    /// layers, slots, and bindings differ per fixture.
+    private func makeRegistry(
+        geometry: RegistryKeyboardGeometry,
+        layers: [String: RegistryKeyboardLayer],
+        slots: [ModifierSpaceSlot] = [],
+        bindings: [RegistryBinding] = []
+    ) -> KeybindingRegistry {
+        KeybindingRegistry(
+            schemaVersion: 2,
+            providers: [],
+            bindings: bindings,
+            diagnostics: [],
+            views: RegistryViews(
+                modifierSpace: ModifierSpaceView(
+                    id: "modifier-space",
+                    label: "Modifier + Space",
+                    slots: slots
+                ),
+                allBindings: AllBindingsView(
+                    id: "all-bindings",
+                    label: "All Bindings",
+                    bindingIds: []
+                ),
+                keyboardLayers: KeyboardLayersView(
+                    id: "keyboard-layers",
+                    label: "Keyboard Layers",
+                    geometry: geometry,
+                    layers: layers
+                )
+            )
+        )
+    }
+
+    /// A layer that contributes nothing but its metadata: no groups, no cells.
+    private func plainLayer(
+        id: String,
+        label: String,
+        trigger: String,
+        overlayGroup: String? = nil,
+        showBaseKeys: Bool? = nil
+    ) -> RegistryKeyboardLayer {
+        RegistryKeyboardLayer(
+            id: id,
+            label: label,
+            trigger: trigger,
+            overlayGroup: overlayGroup,
+            showBaseKeys: showBaseKeys,
+            groups: [],
+            cells: [:]
+        )
+    }
+
+    private func namedPosition(
+        _ name: String,
+        _ source: String
+    ) -> RegistryKeyboardPosition {
+        RegistryKeyboardPosition(
+            position: name,
+            sourceKey: source,
+            mineKey: nil,
+            namedKey: name,
+            width: 1
+        )
+    }
+
     private func modifierSpaceRegistry(occupiedCount: Int) -> KeybindingRegistry {
         let binding = RegistryBinding(
             id: "test.action",
@@ -1514,55 +1455,37 @@ struct OverlayControllerTests {
                 bindingIds: index < occupiedCount ? [binding.id] : []
             )
         }
-        return KeybindingRegistry(
-            schemaVersion: 2,
-            providers: [],
-            bindings: [binding],
-            diagnostics: [],
-            views: RegistryViews(
-                modifierSpace: ModifierSpaceView(
-                    id: "modifier-space",
-                    label: "Modifier + Space",
-                    slots: slots
+        return makeRegistry(
+            geometry: RegistryKeyboardGeometry(
+                layoutId: "mine-iso",
+                rows: [
+                    [
+                        RegistryKeyboardPosition(
+                            position: "KeyW",
+                            sourceKey: "w",
+                            mineKey: "L",
+                            namedKey: nil,
+                            width: 1
+                        ),
+                    ],
+                ]
+            ),
+            layers: [
+                "apps": plainLayer(
+                    id: "apps",
+                    label: "Apps",
+                    trigger: "delay",
+                    overlayGroup: "apps"
                 ),
-                allBindings: AllBindingsView(id: "all-bindings", label: "All Bindings", bindingIds: []),
-                keyboardLayers: KeyboardLayersView(
-                    id: "keyboard-layers",
-                    label: "Keyboard Layers",
-                    geometry: RegistryKeyboardGeometry(
-                        layoutId: "mine-iso",
-                        rows: [
-                            [
-                                RegistryKeyboardPosition(
-                                    position: "KeyW",
-                                    sourceKey: "w",
-                                    mineKey: "L",
-                                    namedKey: nil,
-                                    width: 1
-                                ),
-                            ],
-                        ]
-                    ),
-                    layers: [
-                        "apps": RegistryKeyboardLayer(
-                            id: "apps",
-                            label: "Apps",
-                            trigger: "delay",
-                            overlayGroup: "apps",
-                            groups: [],
-                            cells: [:]
-                        ),
-                        "apps-alt": RegistryKeyboardLayer(
-                            id: "apps-alt",
-                            label: "Alternate Apps",
-                            trigger: "delay",
-                            overlayGroup: "apps",
-                            groups: [],
-                            cells: [:]
-                        ),
-                    ]
-                )
-            )
+                "apps-alt": plainLayer(
+                    id: "apps-alt",
+                    label: "Alternate Apps",
+                    trigger: "delay",
+                    overlayGroup: "apps"
+                ),
+            ],
+            slots: slots,
+            bindings: [binding]
         )
     }
 
@@ -1578,35 +1501,26 @@ struct OverlayControllerTests {
                 )
             }
         }
-        let position = { (name: String, source: String) in
-            RegistryKeyboardPosition(
-                position: name,
-                sourceKey: source,
-                mineKey: nil,
-                namedKey: name,
-                width: 1
-            )
-        }
         let defy = RegistryDefyThumbs(
             label: "Defy thumbs",
             left: RegistryDefyThumbSide(
                 top: [
-                    position("F13", "f13"), position("F14", "f14"),
-                    position("F15", "f15"), position("F16", "f16"),
+                    namedPosition("F13", "f13"), namedPosition("F14", "f14"),
+                    namedPosition("F15", "f15"), namedPosition("F16", "f16"),
                 ],
                 bottom: [
-                    position("Numpad0", "kp0"), position("Numpad1", "kp1"),
-                    position("Numpad2", "kp2"), position("F17", "f17"),
+                    namedPosition("Numpad0", "kp0"), namedPosition("Numpad1", "kp1"),
+                    namedPosition("Numpad2", "kp2"), namedPosition("F17", "f17"),
                 ]
             ),
             right: RegistryDefyThumbSide(
                 top: [
-                    position("F19", "f19"), position("F20", "f20"),
-                    position("F21", "f21"), position("F22", "f22"),
+                    namedPosition("F19", "f19"), namedPosition("F20", "f20"),
+                    namedPosition("F21", "f21"), namedPosition("F22", "f22"),
                 ],
                 bottom: [
-                    position("F18", "f18"), position("Numpad3", "kp3"),
-                    position("Numpad4", "kp4"), position("Numpad5", "kp5"),
+                    namedPosition("F18", "f18"), namedPosition("Numpad3", "kp3"),
+                    namedPosition("Numpad4", "kp4"), namedPosition("Numpad5", "kp5"),
                 ]
             )
         )
@@ -1618,51 +1532,26 @@ struct OverlayControllerTests {
                 bindingIds: []
             )
         }
-        return KeybindingRegistry(
-            schemaVersion: 2,
-            providers: [],
-            bindings: [],
-            diagnostics: [],
-            views: RegistryViews(
-                modifierSpace: ModifierSpaceView(
-                    id: "modifier-space",
-                    label: "Modifier + Space",
-                    slots: freeSlots
+        return makeRegistry(
+            geometry: RegistryKeyboardGeometry(
+                layoutId: "mine-iso",
+                rows: rows,
+                defyThumbs: includeDefy ? defy : nil
+            ),
+            layers: [
+                "mine": plainLayer(
+                    id: "mine",
+                    label: "Mine",
+                    trigger: "manual",
+                    showBaseKeys: true
                 ),
-                allBindings: AllBindingsView(
-                    id: "all-bindings",
-                    label: "All Bindings",
-                    bindingIds: []
+                "fn": plainLayer(
+                    id: "fn",
+                    label: "Media · Brightness · F-Keys",
+                    trigger: "manual"
                 ),
-                keyboardLayers: KeyboardLayersView(
-                    id: "keyboard-layers",
-                    label: "Keyboard Layers",
-                    geometry: RegistryKeyboardGeometry(
-                        layoutId: "mine-iso",
-                        rows: rows,
-                        defyThumbs: includeDefy ? defy : nil
-                    ),
-                    layers: [
-                        "mine": RegistryKeyboardLayer(
-                            id: "mine",
-                            label: "Mine",
-                            trigger: "manual",
-                            overlayGroup: nil,
-                            showBaseKeys: true,
-                            groups: [],
-                            cells: [:]
-                        ),
-                        "fn": RegistryKeyboardLayer(
-                            id: "fn",
-                            label: "Media · Brightness · F-Keys",
-                            trigger: "manual",
-                            overlayGroup: nil,
-                            groups: [],
-                            cells: [:]
-                        ),
-                    ]
-                )
-            )
+            ],
+            slots: freeSlots
         )
     }
 
@@ -1745,42 +1634,19 @@ struct OverlayControllerTests {
             ),
         ]
         if includeApps {
-            layers["apps"] = RegistryKeyboardLayer(
+            layers["apps"] = plainLayer(
                 id: "apps",
                 label: "Apps",
                 trigger: "delay",
-                overlayGroup: nil,
-                showBaseKeys: true,
-                groups: [],
-                cells: [:]
+                showBaseKeys: true
             )
         }
-        return KeybindingRegistry(
-            schemaVersion: 2,
-            providers: [],
-            bindings: [],
-            diagnostics: [],
-            views: RegistryViews(
-                modifierSpace: ModifierSpaceView(
-                    id: "modifier-space",
-                    label: "Modifier + Space",
-                    slots: []
-                ),
-                allBindings: AllBindingsView(
-                    id: "all-bindings",
-                    label: "All Bindings",
-                    bindingIds: []
-                ),
-                keyboardLayers: KeyboardLayersView(
-                    id: "keyboard-layers",
-                    label: "Keyboard Layers",
-                    geometry: RegistryKeyboardGeometry(
-                        layoutId: "mine-iso",
-                        rows: [[position]]
-                    ),
-                    layers: layers
-                )
-            )
+        return makeRegistry(
+            geometry: RegistryKeyboardGeometry(
+                layoutId: "mine-iso",
+                rows: [[position]]
+            ),
+            layers: layers
         )
     }
 
@@ -1796,20 +1662,11 @@ struct OverlayControllerTests {
             namedKey: nil,
             width: 1
         )
-        let arrow = { (name: String, source: String) in
-            RegistryKeyboardPosition(
-                position: name,
-                sourceKey: source,
-                mineKey: nil,
-                namedKey: name,
-                width: 1
-            )
-        }
         let arrows = RegistryArrowCluster(
-            up: arrow("ArrowUp", "up"),
-            left: arrow("ArrowLeft", "left"),
-            down: arrow("ArrowDown", "down"),
-            right: arrow("ArrowRight", "right")
+            up: namedPosition("ArrowUp", "up"),
+            left: namedPosition("ArrowLeft", "left"),
+            down: namedPosition("ArrowDown", "down"),
+            right: namedPosition("ArrowRight", "right")
         )
         let defySlot = RegistryDefySlot(
             firmwareKey: "O",
@@ -1849,66 +1706,23 @@ struct OverlayControllerTests {
             ]
         )
         var layers: [String: RegistryKeyboardLayer] = [
-            "apps": RegistryKeyboardLayer(
-                id: "apps",
-                label: "Apps",
-                trigger: trigger,
-                overlayGroup: nil,
-                groups: [],
-                cells: [:]
-            ),
-            "fn": RegistryKeyboardLayer(
-                id: "fn",
-                label: "Fn",
-                trigger: "manual",
-                overlayGroup: nil,
-                groups: [],
-                cells: [:]
-            ),
+            "apps": plainLayer(id: "apps", label: "Apps", trigger: trigger),
+            "fn": plainLayer(id: "fn", label: "Fn", trigger: "manual"),
         ]
         if includeMine {
-            layers["mine"] = RegistryKeyboardLayer(
+            layers["mine"] = plainLayer(
                 id: "mine",
                 label: "Mine",
-                trigger: "manual",
-                overlayGroup: nil,
-                groups: [],
-                cells: [:]
+                trigger: "manual"
             )
         }
         if includePomodoro {
-            layers["pomodoro"] = RegistryKeyboardLayer(
+            layers["pomodoro"] = plainLayer(
                 id: "pomodoro",
                 label: "Pomodoro",
-                trigger: "manual",
-                overlayGroup: nil,
-                groups: [],
-                cells: [:]
+                trigger: "manual"
             )
         }
-        return KeybindingRegistry(
-            schemaVersion: 2,
-            providers: [],
-            bindings: [],
-            diagnostics: [],
-            views: RegistryViews(
-                modifierSpace: ModifierSpaceView(
-                    id: "modifier-space",
-                    label: "Modifier + Space",
-                    slots: []
-                ),
-                allBindings: AllBindingsView(
-                    id: "all-bindings",
-                    label: "All Bindings",
-                    bindingIds: []
-                ),
-                keyboardLayers: KeyboardLayersView(
-                    id: "keyboard-layers",
-                    label: "Keyboard Layers",
-                    geometry: geometry,
-                    layers: layers
-                )
-            )
-        )
+        return makeRegistry(geometry: geometry, layers: layers)
     }
 }

@@ -34,6 +34,13 @@ private enum VisualRendererError: Error, CustomStringConvertible {
 }
 
 
+private struct Invocation {
+    let registryURL: URL
+    let outputURL: URL
+    let widthPercent: Int
+}
+
+
 private struct RenderedImage: Encodable {
     let path: String
     let profileId: String
@@ -60,29 +67,33 @@ private struct RenderedLayer {
 }
 
 
+/// Fixed contact-sheet geometry; every measure derives from the cell count.
+private struct ContactSheetLayout {
+    let cellCount: Int
+    let columns = 2
+    let outerPadding = 24
+    let gutter = 24
+    let titleHeight = 72
+    let labelHeight = 44
+    let thumbnailWidth = 1500
+    let thumbnailHeight = 950
+
+    var rows: Int { (cellCount + columns - 1) / columns }
+    var cellWidth: Int { thumbnailWidth + outerPadding * 2 }
+    var cellHeight: Int { thumbnailHeight + labelHeight + outerPadding * 2 }
+    var canvasWidth: Int { cellWidth * columns + gutter * (columns - 1) }
+    var canvasHeight: Int { titleHeight + cellHeight * rows + gutter * (rows - 1) }
+}
+
+
 @main
 private struct VisualRenderer {
     @MainActor
     static func main() throws {
-        let arguments = Array(CommandLine.arguments.dropFirst())
-        guard [4, 6].contains(arguments.count),
-              arguments[0] == "--registry",
-              arguments[2] == "--output"
-        else { throw VisualRendererError.usage }
-
-        let widthPercent: Int
-        if arguments.count == 6 {
-            guard arguments[4] == "--width-percent",
-                  let value = Int(arguments[5]), (1...100).contains(value)
-            else { throw VisualRendererError.usage }
-            widthPercent = value
-        } else {
-            widthPercent = 75
-        }
-
-        let registryURL = URL(fileURLWithPath: arguments[1]).standardizedFileURL
-        let outputURL = URL(fileURLWithPath: arguments[3]).standardizedFileURL
-        let registry = try KeybindingRegistry.load(from: registryURL.path)
+        let invocation = try parseInvocation()
+        let registry = try KeybindingRegistry.load(
+            from: invocation.registryURL.path
+        )
         guard let keyboardLayers = registry.views.keyboardLayers,
               let geometry = keyboardLayers.geometry
         else { throw VisualRendererError.missingKeyboardGeometry }
@@ -98,13 +109,104 @@ private struct VisualRenderer {
 
         let fileManager = FileManager.default
         try fileManager.createDirectory(
-            at: outputURL,
+            at: invocation.outputURL,
             withIntermediateDirectories: true
         )
         _ = NSApplication.shared.setActivationPolicy(.prohibited)
         try validateYabaiSymbols(keyboardLayers.layers["yabai"])
 
-        let pomodoroExamples: [(name: String, status: PomodoroStatus?)] = try [
+        let examples = try pomodoroExamples()
+        let display = Config.Display(width_percent: invocation.widthPercent)
+        var imageRecords: [RenderedImage] = []
+        for profile in profiles {
+            try fileManager.createDirectory(
+                at: invocation.outputURL.appendingPathComponent(
+                    profile.id,
+                    isDirectory: true
+                ),
+                withIntermediateDirectories: true
+            )
+
+            let baseLayers = try renderBaseLayers(
+                layerIds: layerIds,
+                profile: profile,
+                registry: registry,
+                display: display,
+                pomodoroStatus: examples.first { $0.name == "paused" }?.status,
+                outputURL: invocation.outputURL
+            )
+            var rendered = baseLayers
+            if keyboardLayers.layers["pomodoro"] != nil {
+                rendered += try renderPomodoroExamples(
+                    examples,
+                    profile: profile,
+                    registry: registry,
+                    display: display,
+                    outputURL: invocation.outputURL
+                )
+            }
+            rendered += try renderYabaiModifierStates(
+                profile: profile,
+                registry: registry,
+                display: display,
+                outputURL: invocation.outputURL
+            )
+            if profile.kind == "defy" {
+                rendered.append(try renderInputPathPreview(
+                    profile: profile,
+                    registry: registry,
+                    display: display,
+                    outputURL: invocation.outputURL
+                ))
+            }
+            imageRecords += rendered.map { record($0, profileId: profile.id) }
+            imageRecords.append(try renderContactSheetImage(
+                profile: profile,
+                layers: baseLayers,
+                outputURL: invocation.outputURL
+            ))
+        }
+
+        try writeManifest(
+            ReviewManifest(
+                registryPath: invocation.registryURL.path,
+                profileIds: profiles.map(\.id),
+                layerIds: layerIds,
+                images: imageRecords
+            ),
+            to: invocation.outputURL
+        )
+    }
+
+    private static func parseInvocation() throws -> Invocation {
+        let arguments = Array(CommandLine.arguments.dropFirst())
+        guard [4, 6].contains(arguments.count),
+              arguments[0] == "--registry",
+              arguments[2] == "--output"
+        else { throw VisualRendererError.usage }
+
+        let widthPercent: Int
+        if arguments.count == 6 {
+            guard arguments[4] == "--width-percent",
+                  let value = Int(arguments[5]), (1...100).contains(value)
+            else { throw VisualRendererError.usage }
+            widthPercent = value
+        } else {
+            widthPercent = 75
+        }
+        return Invocation(
+            registryURL: URL(fileURLWithPath: arguments[1]).standardizedFileURL,
+            outputURL: URL(fileURLWithPath: arguments[3]).standardizedFileURL,
+            widthPercent: widthPercent
+        )
+    }
+
+    /// Every Pomodoro header state worth reviewing, including the unavailable
+    /// one the reader sees when no snapshot exists.
+    private static func pomodoroExamples() throws
+        -> [(name: String, status: PomodoroStatus?)]
+    {
+        let decoded: [(name: String, status: PomodoroStatus?)] = try [
             ("ready", "idle", "work", "general", 1500, 0),
             ("running", "running", "work", "dissertation", 222, 720),
             ("paused", "paused", "work", "dissertation", 222, 720),
@@ -116,166 +218,8 @@ private struct VisualRenderer {
             {"schema_version":1,"observed_at":1000,"state":"\(state)","mode":"\(mode)","context":"\(context)","remaining_seconds":\(remaining),"date":"2026-09-08","dissertation_seconds":\(progress)}
             """
             return (name, try JSONDecoder().decode(PomodoroStatus.self, from: Data(json.utf8)))
-        } + [("unavailable", nil)]
-
-        let display = Config.Display(width_percent: widthPercent)
-        var imageRecords: [RenderedImage] = []
-        for profile in profiles {
-            let profileURL = outputURL.appendingPathComponent(
-                profile.id,
-                isDirectory: true
-            )
-            try fileManager.createDirectory(
-                at: profileURL,
-                withIntermediateDirectories: true
-            )
-            var renderedLayers: [RenderedLayer] = []
-            for layerId in layerIds {
-                let view = KeyboardView(
-                    layerName: layerId,
-                    legacyLayer: nil,
-                    display: display,
-                    registry: registry,
-                    showFreeModifierSpace: false,
-                    geometryProfileId: profile.id,
-                    yabaiQualifier: layerId == "yabai" ? "Preview" : nil,
-                    pomodoroStatus: layerId == "pomodoro"
-                        ? pomodoroExamples.first { $0.name == "paused" }?.status
-                        : nil
-                )
-                let rendered = try render(view: view, layerId: layerId)
-                let relativePath = "\(profile.id)/\(layerId).png"
-                let imageURL = outputURL.appendingPathComponent(relativePath)
-                try writeVerified(rendered.data, to: imageURL)
-                renderedLayers.append(rendered)
-                imageRecords.append(RenderedImage(
-                    path: relativePath,
-                    profileId: profile.id,
-                    layerId: layerId,
-                    width: rendered.width,
-                    height: rendered.height,
-                    sha256: sha256(rendered.data)
-                ))
-            }
-
-            if keyboardLayers.layers["pomodoro"] != nil {
-                for example in pomodoroExamples {
-                    let layerId = "pomodoro-\(example.name)"
-                    let view = KeyboardView(
-                        layerName: "pomodoro",
-                        legacyLayer: nil,
-                        display: display,
-                        registry: registry,
-                        geometryProfileId: profile.id,
-                        pomodoroStatus: example.status
-                    )
-                    let rendered = try render(view: view, layerId: layerId)
-                    let relativePath = "\(profile.id)/\(layerId).png"
-                    try writeVerified(
-                        rendered.data,
-                        to: outputURL.appendingPathComponent(relativePath)
-                    )
-                    imageRecords.append(RenderedImage(
-                        path: relativePath,
-                        profileId: profile.id,
-                        layerId: layerId,
-                        width: rendered.width,
-                        height: rendered.height,
-                        sha256: sha256(rendered.data)
-                    ))
-                }
-            }
-
-            let yabaiStates: [(String, Set<YabaiModifier>)] = [
-                ("base", []),
-                ("option", [.option]),
-                ("shift", [.shift]),
-                ("command", [.command]),
-                ("control", [.control]),
-                ("command-shift", [.command, .shift]),
-            ]
-            for (stateName, activeModifiers) in yabaiStates {
-                let layerId = "yabai-\(stateName)"
-                let view = KeyboardView(
-                    layerName: "yabai",
-                    legacyLayer: nil,
-                    display: display,
-                    registry: registry,
-                    showFreeModifierSpace: false,
-                    geometryProfileId: profile.id,
-                    activeModifiers: activeModifiers,
-                    yabaiQualifier: "Preview"
-                )
-                let rendered = try render(view: view, layerId: layerId)
-                let relativePath = "\(profile.id)/\(layerId).png"
-                let imageURL = outputURL.appendingPathComponent(relativePath)
-                try writeVerified(rendered.data, to: imageURL)
-                imageRecords.append(RenderedImage(
-                    path: relativePath,
-                    profileId: profile.id,
-                    layerId: layerId,
-                    width: rendered.width,
-                    height: rendered.height,
-                    sha256: sha256(rendered.data)
-                ))
-            }
-
-            if profile.kind == "defy" {
-                let layerId = "mine-input-path"
-                let view = KeyboardView(
-                    layerName: "mine",
-                    legacyLayer: nil,
-                    display: display,
-                    registry: registry,
-                    showFreeModifierSpace: false,
-                    geometryProfileId: profile.id,
-                    showInputPath: true
-                )
-                let rendered = try render(view: view, layerId: layerId)
-                let relativePath = "\(profile.id)/\(layerId).png"
-                let imageURL = outputURL.appendingPathComponent(relativePath)
-                try writeVerified(rendered.data, to: imageURL)
-                imageRecords.append(RenderedImage(
-                    path: relativePath,
-                    profileId: profile.id,
-                    layerId: layerId,
-                    width: rendered.width,
-                    height: rendered.height,
-                    sha256: sha256(rendered.data)
-                ))
-            }
-
-            let sheetData = try contactSheet(
-                profileLabel: profile.label,
-                layers: renderedLayers
-            )
-            let sheetPath = "\(profile.id)-contact-sheet.png"
-            let sheetURL = outputURL.appendingPathComponent(sheetPath)
-            try writeVerified(sheetData, to: sheetURL)
-            let sheetDimensions = try imageDimensions(sheetData)
-            imageRecords.append(RenderedImage(
-                path: sheetPath,
-                profileId: profile.id,
-                layerId: nil,
-                width: sheetDimensions.width,
-                height: sheetDimensions.height,
-                sha256: sha256(sheetData)
-            ))
         }
-
-        let manifest = ReviewManifest(
-            registryPath: registryURL.path,
-            profileIds: profiles.map(\.id),
-            layerIds: layerIds,
-            images: imageRecords
-        )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let manifestData = try encoder.encode(manifest)
-        try manifestData.write(
-            to: outputURL.appendingPathComponent("manifest.json"),
-            options: .atomic
-        )
+        return decoded + [("unavailable", nil)]
     }
 
     private static func validateYabaiSymbols(
@@ -297,6 +241,193 @@ private struct VisualRenderer {
                 }
             }
         }
+    }
+
+    @MainActor
+    private static func renderBaseLayers(
+        layerIds: [String],
+        profile: RegistryKeyboardGeometryProfile,
+        registry: KeybindingRegistry,
+        display: Config.Display,
+        pomodoroStatus: PomodoroStatus?,
+        outputURL: URL
+    ) throws -> [RenderedLayer] {
+        try layerIds.map { layerId in
+            try writeImage(
+                view: KeyboardView(
+                    layerName: layerId,
+                    legacyLayer: nil,
+                    display: display,
+                    registry: registry,
+                    showFreeModifierSpace: false,
+                    geometryProfileId: profile.id,
+                    yabaiQualifier: layerId == "yabai" ? "Preview" : nil,
+                    pomodoroStatus: layerId == "pomodoro" ? pomodoroStatus : nil
+                ),
+                layerId: layerId,
+                profileId: profile.id,
+                outputURL: outputURL
+            )
+        }
+    }
+
+    @MainActor
+    private static func renderPomodoroExamples(
+        _ examples: [(name: String, status: PomodoroStatus?)],
+        profile: RegistryKeyboardGeometryProfile,
+        registry: KeybindingRegistry,
+        display: Config.Display,
+        outputURL: URL
+    ) throws -> [RenderedLayer] {
+        try examples.map { example in
+            try writeImage(
+                view: KeyboardView(
+                    layerName: "pomodoro",
+                    legacyLayer: nil,
+                    display: display,
+                    registry: registry,
+                    geometryProfileId: profile.id,
+                    pomodoroStatus: example.status
+                ),
+                layerId: "pomodoro-\(example.name)",
+                profileId: profile.id,
+                outputURL: outputURL
+            )
+        }
+    }
+
+    private static let yabaiStates: [(name: String, modifiers: Set<YabaiModifier>)] = [
+        ("base", []),
+        ("option", [.option]),
+        ("shift", [.shift]),
+        ("command", [.command]),
+        ("control", [.control]),
+        ("command-shift", [.command, .shift]),
+    ]
+
+    @MainActor
+    private static func renderYabaiModifierStates(
+        profile: RegistryKeyboardGeometryProfile,
+        registry: KeybindingRegistry,
+        display: Config.Display,
+        outputURL: URL
+    ) throws -> [RenderedLayer] {
+        try yabaiStates.map { state in
+            try writeImage(
+                view: KeyboardView(
+                    layerName: "yabai",
+                    legacyLayer: nil,
+                    display: display,
+                    registry: registry,
+                    showFreeModifierSpace: false,
+                    geometryProfileId: profile.id,
+                    activeModifiers: state.modifiers,
+                    yabaiQualifier: "Preview"
+                ),
+                layerId: "yabai-\(state.name)",
+                profileId: profile.id,
+                outputURL: outputURL
+            )
+        }
+    }
+
+    @MainActor
+    private static func renderInputPathPreview(
+        profile: RegistryKeyboardGeometryProfile,
+        registry: KeybindingRegistry,
+        display: Config.Display,
+        outputURL: URL
+    ) throws -> RenderedLayer {
+        try writeImage(
+            view: KeyboardView(
+                layerName: "mine",
+                legacyLayer: nil,
+                display: display,
+                registry: registry,
+                showFreeModifierSpace: false,
+                geometryProfileId: profile.id,
+                showInputPath: true
+            ),
+            layerId: "mine-input-path",
+            profileId: profile.id,
+            outputURL: outputURL
+        )
+    }
+
+    @MainActor
+    private static func renderContactSheetImage(
+        profile: RegistryKeyboardGeometryProfile,
+        layers: [RenderedLayer],
+        outputURL: URL
+    ) throws -> RenderedImage {
+        let sheetData = try contactSheet(
+            profileLabel: profile.label,
+            layers: layers
+        )
+        let sheetPath = "\(profile.id)-contact-sheet.png"
+        try writeVerified(
+            sheetData,
+            to: outputURL.appendingPathComponent(sheetPath)
+        )
+        let sheetDimensions = try imageDimensions(sheetData)
+        return RenderedImage(
+            path: sheetPath,
+            profileId: profile.id,
+            layerId: nil,
+            width: sheetDimensions.width,
+            height: sheetDimensions.height,
+            sha256: sha256(sheetData)
+        )
+    }
+
+    private static func writeManifest(
+        _ manifest: ReviewManifest,
+        to outputURL: URL
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let manifestData = try encoder.encode(manifest)
+        try manifestData.write(
+            to: outputURL.appendingPathComponent("manifest.json"),
+            options: .atomic
+        )
+    }
+
+    /// Renders one layer view and writes its verified PNG to the path the
+    /// manifest will report for it.
+    @MainActor
+    private static func writeImage(
+        view: KeyboardView,
+        layerId: String,
+        profileId: String,
+        outputURL: URL
+    ) throws -> RenderedLayer {
+        let rendered = try render(view: view, layerId: layerId)
+        try writeVerified(
+            rendered.data,
+            to: outputURL.appendingPathComponent(
+                imagePath(profileId: profileId, layerId: layerId)
+            )
+        )
+        return rendered
+    }
+
+    private static func record(
+        _ rendered: RenderedLayer,
+        profileId: String
+    ) -> RenderedImage {
+        RenderedImage(
+            path: imagePath(profileId: profileId, layerId: rendered.layerId),
+            profileId: profileId,
+            layerId: rendered.layerId,
+            width: rendered.width,
+            height: rendered.height,
+            sha256: sha256(rendered.data)
+        )
+    }
+
+    private static func imagePath(profileId: String, layerId: String) -> String {
+        "\(profileId)/\(layerId).png"
     }
 
     @MainActor
@@ -345,23 +476,58 @@ private struct VisualRenderer {
             }
             return (layer, image)
         }
-        let columns = 2
-        let rows = (layers.count + columns - 1) / columns
-        let outerPadding = 24
-        let gutter = 24
-        let titleHeight = 72
-        let labelHeight = 44
-        let thumbnailWidth = 1500
-        let thumbnailHeight = 950
-        let cellWidth = thumbnailWidth + outerPadding * 2
-        let cellHeight = thumbnailHeight + labelHeight + outerPadding * 2
-        let canvasWidth = cellWidth * columns + gutter * (columns - 1)
-        let canvasHeight = titleHeight + cellHeight * rows + gutter * (rows - 1)
+        let layout = ContactSheetLayout(cellCount: layers.count)
+        let canvas = try makeCanvas(
+            width: layout.canvasWidth,
+            height: layout.canvasHeight,
+            profileLabel: profileLabel
+        )
 
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = canvas.context
+        NSColor(calibratedRed: 0.075, green: 0.075, blue: 0.11, alpha: 1).setFill()
+        NSRect(
+            x: 0,
+            y: 0,
+            width: layout.canvasWidth,
+            height: layout.canvasHeight
+        ).fill()
+
+        let title = NSAttributedString(
+            string: profileLabel.uppercased(),
+            attributes: [
+                .font: NSFont.monospacedSystemFont(ofSize: 36, weight: .bold),
+                .foregroundColor: NSColor(calibratedRed: 0.80, green: 0.65, blue: 0.97, alpha: 1),
+            ]
+        )
+        title.draw(at: NSPoint(
+            x: layout.outerPadding,
+            y: layout.canvasHeight - 52
+        ))
+
+        for (index, pair) in images.enumerated() {
+            drawCell(index: index, layer: pair.0, image: pair.1, layout: layout)
+        }
+
+        NSGraphicsContext.restoreGraphicsState()
+        guard let data = canvas.representation.representation(
+            using: .png,
+            properties: [:]
+        ) else {
+            throw VisualRendererError.contactSheetFailed(profileLabel)
+        }
+        return data
+    }
+
+    private static func makeCanvas(
+        width: Int,
+        height: Int,
+        profileLabel: String
+    ) throws -> (representation: NSBitmapImageRep, context: NSGraphicsContext) {
         guard let representation = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: canvasWidth,
-            pixelsHigh: canvasHeight,
+            pixelsWide: width,
+            pixelsHigh: height,
             bitsPerSample: 8,
             samplesPerPixel: 4,
             hasAlpha: true,
@@ -373,72 +539,57 @@ private struct VisualRenderer {
         else {
             throw VisualRendererError.contactSheetFailed(profileLabel)
         }
+        return (representation, context)
+    }
 
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSColor(calibratedRed: 0.075, green: 0.075, blue: 0.11, alpha: 1).setFill()
-        NSRect(x: 0, y: 0, width: canvasWidth, height: canvasHeight).fill()
-
-        let title = NSAttributedString(
-            string: profileLabel.uppercased(),
+    @MainActor
+    private static func drawCell(
+        index: Int,
+        layer: RenderedLayer,
+        image: NSImage,
+        layout: ContactSheetLayout
+    ) {
+        let column = index % layout.columns
+        let row = index / layout.columns
+        let cellX = column * (layout.cellWidth + layout.gutter)
+        let cellTop = layout.canvasHeight - layout.titleHeight
+            - row * (layout.cellHeight + layout.gutter)
+        let label = NSAttributedString(
+            string: layer.layerId.uppercased(),
             attributes: [
-                .font: NSFont.monospacedSystemFont(ofSize: 36, weight: .bold),
-                .foregroundColor: NSColor(calibratedRed: 0.80, green: 0.65, blue: 0.97, alpha: 1),
+                .font: NSFont.monospacedSystemFont(ofSize: 28, weight: .semibold),
+                .foregroundColor: NSColor(calibratedWhite: 0.70, alpha: 1),
             ]
         )
-        title.draw(at: NSPoint(x: outerPadding, y: canvasHeight - 52))
-
-        for (index, pair) in images.enumerated() {
-            let column = index % columns
-            let row = index / columns
-            let cellX = column * (cellWidth + gutter)
-            let cellTop = canvasHeight - titleHeight - row * (cellHeight + gutter)
-            let label = NSAttributedString(
-                string: pair.0.layerId.uppercased(),
-                attributes: [
-                    .font: NSFont.monospacedSystemFont(ofSize: 28, weight: .semibold),
-                    .foregroundColor: NSColor(calibratedWhite: 0.70, alpha: 1),
-                ]
+        label.draw(at: NSPoint(
+            x: cellX + layout.outerPadding,
+            y: cellTop - layout.labelHeight
+        ))
+        let scale = min(
+            1,
+            min(
+                CGFloat(layout.thumbnailWidth) / CGFloat(layer.width),
+                CGFloat(layout.thumbnailHeight) / CGFloat(layer.height)
             )
-            label.draw(at: NSPoint(
-                x: cellX + outerPadding,
-                y: cellTop - labelHeight
-            ))
-            let scale = min(
-                1,
-                min(
-                    CGFloat(thumbnailWidth) / CGFloat(pair.0.width),
-                    CGFloat(thumbnailHeight) / CGFloat(pair.0.height)
-                )
-            )
-            let imageWidth = Int((CGFloat(pair.0.width) * scale).rounded())
-            let imageHeight = Int((CGFloat(pair.0.height) * scale).rounded())
-            let imageX = cellX + outerPadding
-                + (thumbnailWidth - imageWidth) / 2
-            let imageY = cellTop - labelHeight - outerPadding - imageHeight
-            pair.1.draw(
-                in: NSRect(
-                    x: imageX,
-                    y: imageY,
-                    width: imageWidth,
-                    height: imageHeight
-                ),
-                from: .zero,
-                operation: .sourceOver,
-                fraction: 1,
-                respectFlipped: true,
-                hints: nil
-            )
-        }
-
-        NSGraphicsContext.restoreGraphicsState()
-        guard let data = representation.representation(
-            using: .png,
-            properties: [:]
-        ) else {
-            throw VisualRendererError.contactSheetFailed(profileLabel)
-        }
-        return data
+        )
+        let imageWidth = Int((CGFloat(layer.width) * scale).rounded())
+        let imageHeight = Int((CGFloat(layer.height) * scale).rounded())
+        let imageX = cellX + layout.outerPadding
+            + (layout.thumbnailWidth - imageWidth) / 2
+        let imageY = cellTop - layout.labelHeight - layout.outerPadding - imageHeight
+        image.draw(
+            in: NSRect(
+                x: imageX,
+                y: imageY,
+                width: imageWidth,
+                height: imageHeight
+            ),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1,
+            respectFlipped: true,
+            hints: nil
+        )
     }
 
     private static func imageDimensions(_ data: Data) throws -> (width: Int, height: Int) {

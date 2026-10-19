@@ -127,17 +127,7 @@ struct KeyboardGeometryLayoutTests {
 
     @Test("Defy bottom vacancies face the center and device-local slots stay physical")
     func defySlotKinds() {
-        let mappedKey = KeyboardPresentedKey(
-            id: "KeyQ",
-            width: 1,
-            badge: "J",
-            actionLabel: nil,
-            freeLabel: nil,
-            colorHex: nil,
-            primary: nil,
-            holdModifier: nil,
-            explanation: nil
-        )
+        let mappedKey = presentedKey(badge: "J")
         let mapped = KeyboardPresentedDefySlot(
             firmwareKey: "Q",
             sourceKey: "q",

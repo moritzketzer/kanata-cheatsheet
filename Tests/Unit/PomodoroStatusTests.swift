@@ -114,3 +114,27 @@ func pomodoroFixture(
     {"schema_version":1,"observed_at":1000,"state":"\(state)","mode":"\(mode)","context":"\(context)","remaining_seconds":\(remaining),"date":"\(date)","dissertation_seconds":\(progress)}
     """
 }
+
+
+/// The decoded form of `pomodoroFixture`, for callers that need a status
+/// rather than the snapshot JSON itself.
+func decodedPomodoroStatus(
+    state: String = "paused",
+    mode: String = "work",
+    context: String = "dissertation",
+    remaining: Int = 222,
+    progress: Int = 720,
+    date: String = "2026-09-08"
+) throws -> PomodoroStatus {
+    try JSONDecoder().decode(
+        PomodoroStatus.self,
+        from: Data(pomodoroFixture(
+            state: state,
+            mode: mode,
+            context: context,
+            remaining: remaining,
+            progress: progress,
+            date: date
+        ).utf8)
+    )
+}

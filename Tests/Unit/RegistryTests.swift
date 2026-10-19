@@ -638,6 +638,28 @@ private func versionTwoFixtureData(
 }
 
 
+/// The registry projection for `layerName`, required to exist: these tests
+/// always read a layer the parsed fixture declares.
+private func projected(
+    _ layerName: String,
+    from registry: KeybindingRegistry,
+    profile: String? = nil,
+    showFree: Bool = false,
+    modifiers: Set<YabaiModifier> = []
+) throws -> KeyboardLayerPresentation {
+    try #require(
+        KeyboardLayerProjector.presentation(
+            layerName: layerName,
+            legacyLayer: nil,
+            registry: registry,
+            showFree: showFree,
+            geometryProfileId: profile,
+            activeModifiers: modifiers
+        )
+    )
+}
+
+
 @Suite("Keybinding Registry")
 struct RegistryTests {
     @Test("schema two presentation variants remain optional")
@@ -680,14 +702,10 @@ struct RegistryTests {
             from: versionTwoFixtureData(includeModifierVariants: true)
         )
 
-        let all = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "yabai",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                activeModifiers: Set(YabaiModifier.allCases)
-            )
+        let all = try projected(
+            "yabai",
+            from: registry,
+            modifiers: Set(YabaiModifier.allCases)
         )
         let expected: [String: (YabaiModifier, String)] = [
             "KeyU": (.control, "Resize north"),
@@ -714,18 +732,14 @@ struct RegistryTests {
         let registry = try KeybindingRegistry.parse(
             from: versionTwoFixtureData(includeModifierVariants: true)
         )
-        let projected = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "yabai",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                activeModifiers: [.command, .shift]
-            )
+        let commandShift = try projected(
+            "yabai",
+            from: registry,
+            modifiers: [.command, .shift]
         )
-        let nextWindow = try #require(projected.key(at: "KeyU"))
-        let scratch = try #require(projected.key(at: "Tab"))
-        let shiftHold = try #require(projected.key(at: "KeyI"))
+        let nextWindow = try #require(commandShift.key(at: "KeyU"))
+        let scratch = try #require(commandShift.key(at: "Tab"))
+        let shiftHold = try #require(commandShift.key(at: "KeyI"))
 
         #expect(nextWindow.actionModifier == .command)
         #expect(nextWindow.explanation == "Warp north")
@@ -744,43 +758,21 @@ struct RegistryTests {
         let registry = try KeybindingRegistry.parse(
             from: versionTwoFixtureData(includeModifierVariants: true)
         )
-        let baseYabai = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "yabai",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
-        let modifiedYabai = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "yabai",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                activeModifiers: [.command, .shift]
-            )
+        let baseYabai = try projected("yabai", from: registry)
+        let modifiedYabai = try projected(
+            "yabai",
+            from: registry,
+            modifiers: [.command, .shift]
         )
         for position in ["KeyL", "KeyA"] {
             #expect(baseYabai.key(at: position) == modifiedYabai.key(at: position))
         }
 
-        let baseMine = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
-        let modifiedMine = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                activeModifiers: Set(YabaiModifier.allCases)
-            )
+        let baseMine = try projected("mine", from: registry)
+        let modifiedMine = try projected(
+            "mine",
+            from: registry,
+            modifiers: Set(YabaiModifier.allCases)
         )
         #expect(baseMine == modifiedMine)
     }
@@ -795,14 +787,7 @@ struct RegistryTests {
         )
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
         let mineLayer = try #require(registry.views.keyboardLayers?.layers["mine"])
-        let mine = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let mine = try projected("mine", from: registry)
         let digit = try #require(mine.key(at: "KeyD"))
         let symbols = try #require(mine.key(at: "KeyW"))
 
@@ -821,14 +806,7 @@ struct RegistryTests {
     @Test("schema two cells without presentation use legacy icon and label")
     func projectsLegacyPresentationFallback() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let alternateApps = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps-alt",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let alternateApps = try projected("apps-alt", from: registry)
         let chrome = try #require(alternateApps.key(at: "KeyD"))
 
         #expect(chrome.actionLabel == "Chrome")
@@ -912,15 +890,7 @@ struct RegistryTests {
         let registry = try KeybindingRegistry.parse(
             from: versionTwoFixtureData(includeGeometryProfiles: true)
         )
-        let presentation = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                geometryProfileId: "defy"
-            )
-        )
+        let presentation = try projected("mine", from: registry, profile: "defy")
         guard case .defy(let left, _) = presentation.geometry else {
             Issue.record("Expected Defy presentation")
             return
@@ -950,15 +920,7 @@ struct RegistryTests {
         let registry = try KeybindingRegistry.parse(
             from: versionTwoFixtureData(includeGeometryProfiles: true)
         )
-        let presentation = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false,
-                geometryProfileId: profileID
-            )
-        )
+        let presentation = try projected("mine", from: registry, profile: profileID)
         let key = try #require(presentation.key(at: "KeyO"))
 
         #expect(key.holdModifier == nil)
@@ -990,24 +952,8 @@ struct RegistryTests {
         ])
 
         for layerName in keyboardLayers.layers.keys.sorted() {
-            let macbook = try #require(
-                KeyboardLayerProjector.presentation(
-                    layerName: layerName,
-                    legacyLayer: nil,
-                    registry: registry,
-                    showFree: false,
-                    geometryProfileId: "macbook"
-                )
-            )
-            let defy = try #require(
-                KeyboardLayerProjector.presentation(
-                    layerName: layerName,
-                    legacyLayer: nil,
-                    registry: registry,
-                    showFree: false,
-                    geometryProfileId: "defy"
-                )
-            )
+            let macbook = try projected(layerName, from: registry, profile: "macbook")
+            let defy = try projected(layerName, from: registry, profile: "defy")
             guard case .macbook = macbook.geometry else {
                 Issue.record("Expected MacBook presentation for \(layerName)")
                 return
@@ -1044,14 +990,7 @@ struct RegistryTests {
         let scroll = try #require(
             geometry.rows.lazy.flatMap { $0 }.first { $0.position == "IntlBackslash" }
         )
-        let mine = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let mine = try projected("mine", from: registry)
         let cluster = try #require(mine.arrowCluster)
 
         #expect(scroll.namedKey == "Homerow Scroll")
@@ -1083,30 +1022,9 @@ struct RegistryTests {
         #expect(KeyboardVisualSemantics.glyphScale("F12") == .compact)
 
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let mine = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
-        let function = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "fn",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
-        let alternateApps = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps-alt",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let mine = try projected("mine", from: registry)
+        let function = try projected("fn", from: registry)
+        let alternateApps = try projected("apps-alt", from: registry)
 
         #expect(mine.hasHoldModifiers)
         #expect(function.rows.flatMap { $0 }.allSatisfy { $0.holdModifier == nil })
@@ -1120,14 +1038,7 @@ struct RegistryTests {
         let registry = try KeybindingRegistry.parse(
             from: versionTwoFixtureData(includeIconlessCell: true)
         )
-        let apps = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let apps = try projected("apps", from: registry)
         let finder = try #require(apps.key(at: "KeyW"))
 
         #expect(finder.actionLabel == "Finder")
@@ -1146,14 +1057,7 @@ struct RegistryTests {
         #expect(section.columns == ["Keys", "Hold"])
         #expect(section.rows == [["C / H", "Control"], ["R / S", "Option"]])
 
-        let presentation = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "yabai",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let presentation = try projected("yabai", from: registry)
         #expect(presentation.footer == layer.footer)
     }
 
@@ -1169,14 +1073,7 @@ struct RegistryTests {
     @Test("projects all alternate apps from the registry")
     func projectsAlternateApps() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let alternateApps = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps-alt",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let alternateApps = try projected("apps-alt", from: registry)
 
         #expect(alternateApps.label == "Alternate Apps")
         #expect(alternateApps.key(at: "KeyD")?.actionLabel == "Chrome")
@@ -1189,14 +1086,7 @@ struct RegistryTests {
     @Test("base presentation fills Mine labels and keeps semantic actions")
     func projectsBaseKeysAndActions() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let mine = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let mine = try projected("mine", from: registry)
 
         let empty = try #require(mine.key(at: "KeyZ"))
         #expect(empty.badge == "V")
@@ -1214,14 +1104,7 @@ struct RegistryTests {
     @Test("projects passthrough keys quietly and omits their legend group")
     func projectsPassthroughQuietly() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let yabai = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "yabai",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let yabai = try projected("yabai", from: registry)
         let f1 = try #require(yabai.key(at: "F1"))
 
         #expect(f1.badge == "F1")
@@ -1235,14 +1118,7 @@ struct RegistryTests {
     @Test("projects Defy thumbs in checked physical order")
     func projectsDefyThumbs() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let mine = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "mine",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
+        let mine = try projected("mine", from: registry)
         let thumbs = try #require(mine.defyThumbs)
 
         #expect(thumbs.leftTop.map(\.id) == ["F13", "F14", "F15", "F16"])
@@ -1270,10 +1146,7 @@ struct RegistryTests {
             includeGeometryProfiles: true,
             includePhysicalIds: identified
         ))
-        let presentation = try #require(KeyboardLayerProjector.presentation(
-            layerName: "mine", legacyLayer: nil, registry: registry,
-            showFree: false, geometryProfileId: "defy"
-        ))
+        let presentation = try projected("mine", from: registry, profile: "defy")
         guard case .defy(let left, let right) = presentation.geometry else {
             Issue.record("Expected Defy geometry")
             return
@@ -1357,22 +1230,8 @@ struct RegistryTests {
     @Test("occupied-only and show-free projections use mine badges")
     func projectsOccupiedAndFreeKeys() throws {
         let registry = try KeybindingRegistry.parse(from: versionTwoFixtureData())
-        let occupied = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: false
-            )
-        )
-        let showFree = try #require(
-            KeyboardLayerProjector.presentation(
-                layerName: "apps",
-                legacyLayer: nil,
-                registry: registry,
-                showFree: true
-            )
-        )
+        let occupied = try projected("apps", from: registry)
+        let showFree = try projected("apps", from: registry, showFree: true)
         let occupiedL = try #require(occupied.key(at: "KeyW"))
         let occupiedV = try #require(occupied.key(at: "KeyZ"))
         let freeV = try #require(showFree.key(at: "KeyZ"))
