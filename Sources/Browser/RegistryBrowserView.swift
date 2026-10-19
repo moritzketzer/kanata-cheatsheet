@@ -72,6 +72,7 @@ struct RegistryBrowserView: View {
             if sidebarSelection == .modifierSpace {
                 ModifierSpaceBrowserGrid(
                     registry: registry,
+                    search: search,
                     matchingBindingIDs: Set(bindings.map(\.id))
                 )
             } else {
@@ -296,6 +297,7 @@ private struct InspectorValue: View {
 @available(macOS 14, *)
 private struct ModifierSpaceBrowserGrid: View {
     let registry: KeybindingRegistry
+    let search: String
     let matchingBindingIDs: Set<String>
 
     var body: some View {
@@ -313,6 +315,7 @@ private struct ModifierSpaceBrowserGrid: View {
                     ModifierSpaceSlotCard(
                         slot: slot,
                         bindings: slot.bindingIds.compactMap { bindingsByID[$0] },
+                        search: search,
                         matchingBindingIDs: matchingBindingIDs
                     )
                 }
@@ -327,6 +330,7 @@ private struct ModifierSpaceBrowserGrid: View {
 private struct ModifierSpaceSlotCard: View {
     let slot: ModifierSpaceSlot
     let bindings: [RegistryBinding]
+    let search: String
     let matchingBindingIDs: Set<String>
 
     var body: some View {
@@ -346,8 +350,11 @@ private struct ModifierSpaceSlotCard: View {
                             .foregroundStyle(.secondary)
                     }
                     .opacity(
-                        matchingBindingIDs.isEmpty || matchingBindingIDs.contains(binding.id)
-                            ? 1 : 0.28
+                        ModifierSpaceDimming.isDimmed(
+                            bindingID: binding.id,
+                            search: search,
+                            matchingBindingIDs: matchingBindingIDs
+                        ) ? 0.28 : 1
                     )
                 }
             }
